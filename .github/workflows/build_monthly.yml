@@ -57,8 +57,8 @@ jobs:
           # 1. Update Version (e.g., 2026.0.2)
           sed -i "s/^project-version=.*/project-version=$NEW_VERSION/" gradle.properties
           
-          # 2. Reset Iteration to 1 (So next dev build starts at 1)
-          sed -i "s/^project-iteration=.*/project-iteration=1/" gradle.properties
+          # 2. Reset Iteration to 0 (So next dev build starts at 0)
+          sed -i "s/^project-iteration=.*/project-iteration=0/" gradle.properties
           
           # Verify
           grep "project-version" gradle.properties
