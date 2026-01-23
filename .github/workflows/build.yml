@@ -32,7 +32,7 @@ jobs:
       # 4a. Build (Test Only)
       # Run this ONLY for Pull Requests.
       - name: Build (Test Only)
-        if: github.event_name == 'pull_request'
+        if: ${{ github.event_name == 'pull_request' }}
         run: ./gradlew clean build
         env:
           BUILD_NUMBER: ${{ github.run_number }}
@@ -40,7 +40,7 @@ jobs:
       # 4b. Build & Publish (DEV)
       # Run this for 'push to master' (creates -DEV builds)
       - name: Publish Dev Build
-        if: github.event_name == 'push' || github.event_name == 'pull_request' && !startsWith(github.ref, 'refs/tags/')
+        if: ${{ (github.event_name == 'push' || github.event_name == 'pull_request') && !startsWith(github.ref, 'refs/tags/') }}
         run: ./gradlew clean build publish
         env:
           BUILD_NUMBER: ${{ github.run_number }}
@@ -50,7 +50,7 @@ jobs:
       # 4c. Build & Publish (RELEASE)
       # Run this ONLY when a tag (v*) is pushed.
       - name: Publish Release
-        if: startsWith(github.ref, 'refs/tags/')
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
         run: ./gradlew clean build publish
         env:
           # We pass the tag name (e.g., v2026.0.0) to Gradle
@@ -68,4 +68,3 @@ jobs:
             !**/build/libs/*-sources.jar
             !**/build/libs/*-javadoc.jar
           retention-days: 1
-
