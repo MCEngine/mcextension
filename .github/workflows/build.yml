@@ -29,6 +29,13 @@ jobs:
           chmod +x gradlew
           sed -i 's/\r$//' gradlew
 
+      # Added step to check project-iteration from gradle.properties
+      - name: Check Iteration
+        id: check_iteration
+        run: |
+          ITERATION=$(grep 'project-iteration=' gradle.properties | cut -d'=' -f2)
+          echo "iteration=$ITERATION" >> $GITHUB_OUTPUT
+
       # 4a. Build (Test Only)
       # Run this ONLY for Pull Requests.
       - name: Build (Test Only)
@@ -39,8 +46,9 @@ jobs:
 
       # 4b. Build & Publish (DEV)
       # Run this for 'push to master' (creates -DEV builds)
+      # Logic: Run if (push OR PR) AND NOT a tag AND iteration != 0
       - name: Publish Dev Build
-        if: ${{ (github.event_name == 'push' || github.event_name == 'pull_request') && !startsWith(github.ref, 'refs/tags/') }}
+        if: ${{ (github.event_name == 'push' || github.event_name == 'pull_request') && !startsWith(github.ref, 'refs/tags/') && steps.check_iteration.outputs.iteration != '0' }}
         run: ./gradlew clean build publish
         env:
           BUILD_NUMBER: ${{ github.run_number }}
@@ -48,9 +56,9 @@ jobs:
           USER_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # 4c. Build & Publish (RELEASE)
-      # Run this ONLY when a tag (v*) is pushed.
+      # Run this ONLY when a tag (v*) is pushed AND iteration != 0
       - name: Publish Release
-        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+        if: ${{ startsWith(github.ref, 'refs/tags/') && steps.check_iteration.outputs.iteration != '0' }}
         run: ./gradlew clean build publish
         env:
           # We pass the tag name (e.g., v2026.0.0) to Gradle
