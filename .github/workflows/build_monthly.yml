@@ -1,0 +1,87 @@
+name: Monthly Version Update & Publish
+
+on:
+  schedule:
+    - cron: '0 0 1 * *' # Run at 00:00 UTC on the 1st of every month
+  workflow_dispatch: # Allows manual testing
+
+jobs:
+  monthly-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          # Optional: Use the token here too if you want the checkout 
+          # to be authenticated as the agent (helps with branch protection)
+          token: ${{ secrets.AGENT_TOKEN }}
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Fix Gradlew Permissions
+        run: |
+          chmod +x gradlew
+          sed -i 's/\r$//' gradlew
+
+      - name: Calculate New Version
+        id: versioning
+        run: |
+          YEAR=$(date +'%Y')
+          MONTH=$(date +'%m')
+          MONTH=$((10#$MONTH))
+          MAJOR=$((MONTH / 10))
+          MINOR=$((MONTH % 10))
+          NEW_VERSION="$YEAR.$MAJOR.$MINOR"
+          
+          echo "Calculated Version: $NEW_VERSION"
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create Release Branch
+        run: |
+          VERSION=${{ steps.versioning.outputs.new_version }}
+          git checkout -b "release/$VERSION"
+          echo "Created branch release/$VERSION"
+
+      - name: Update gradle.properties
+        run: |
+          NEW_VERSION=${{ steps.versioning.outputs.new_version }}
+          
+          # 1. Update Version (e.g., 2026.0.2)
+          sed -i "s/^project-version=.*/project-version=$NEW_VERSION/" gradle.properties
+          
+          # 2. Reset Iteration to 1 (So next dev build starts at 1)
+          sed -i "s/^project-iteration=.*/project-iteration=1/" gradle.properties
+          
+          # Verify
+          grep "project-version" gradle.properties
+          grep "project-iteration" gradle.properties
+
+      - name: Build and Publish Package
+        run: ./gradlew clean build publish
+        env:
+          RELEASE_VERSION: ${{ steps.versioning.outputs.new_version }}
+          # Force the uploader to be agent-mcengine
+          USER_GITHUB_NAME: "agent-mcengine"
+          USER_GITHUB_TOKEN: ${{ secrets.AGENT_TOKEN }}
+
+      - name: Push Branch
+        run: |
+          VERSION=${{ steps.versioning.outputs.new_version }}
+          
+          # This sets the visible commit author
+          git config --global user.name "agent-mcengine"
+          git config --global user.email "mcengine.official.agt@outlook.com"
+          
+          git add gradle.properties
+          git commit -m "chore: Release version $VERSION"
+          
+          # Push using the authenticated user (from Checkout step or default)
+          git push origin "release/$VERSION"
