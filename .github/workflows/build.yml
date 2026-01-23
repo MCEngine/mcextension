@@ -22,12 +22,13 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
-      # 3. Grant execute permission
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
+      # 3. Grant execute permission & Fix Windows line endings
+      - name: Fix Gradlew Permissions
+        run: |
+          chmod +x gradlew
+          sed -i 's/\r$//' gradlew
 
       # 4. Build with Gradle
-      # The BUILD_NUMBER env is crucial for your dynamic versioning logic.
       - name: Build with Gradle
         run: ./gradlew clean build
         env:
