@@ -40,7 +40,7 @@ jobs:
       # 4b. Build & Publish (DEV)
       # Run this for 'push to master' (creates -DEV builds)
       - name: Publish Dev Build
-        if: github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/')
+        if: github.event_name == 'push' || github.event_name == 'pull_request' && !startsWith(github.ref, 'refs/tags/')
         run: ./gradlew clean build publish
         env:
           BUILD_NUMBER: ${{ github.run_number }}
@@ -68,3 +68,4 @@ jobs:
             !**/build/libs/*-sources.jar
             !**/build/libs/*-javadoc.jar
           retention-days: 1
+
