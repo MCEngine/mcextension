@@ -1,40 +1,63 @@
-name: Build MCExtension
+name: Build & Publish MCExtension
 
 on:
   push:
     branches: [ "master" ]
+    tags: [ "v*" ]
   pull_request:
     branches: [ "master" ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
 
     steps:
-      # 1. Check out the code
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # 2. Set up Java 21
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
           java-version: '21'
           distribution: 'temurin'
 
-      # 3. Grant execute permission & Fix Windows line endings
       - name: Fix Gradlew Permissions
         run: |
           chmod +x gradlew
           sed -i 's/\r$//' gradlew
 
-      # 4. Build with Gradle
-      - name: Build with Gradle
+      # 4a. Build (Test Only)
+      # Run this ONLY for Pull Requests.
+      - name: Build (Test Only)
+        if: github.event_name == 'pull_request'
         run: ./gradlew clean build
         env:
           BUILD_NUMBER: ${{ github.run_number }}
 
-      # 5. Save the JARs
+      # 4b. Build & Publish (DEV)
+      # Run this for 'push to master' (creates -DEV builds)
+      - name: Publish Dev Build
+        if: github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/')
+        run: ./gradlew clean build publish
+        env:
+          BUILD_NUMBER: ${{ github.run_number }}
+          USER_GITHUB_NAME: ${{ github.actor }}
+          USER_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # 4c. Build & Publish (RELEASE)
+      # Run this ONLY when a tag (v*) is pushed.
+      - name: Publish Release
+        if: startsWith(github.ref, 'refs/tags/')
+        run: ./gradlew clean build publish
+        env:
+          # We pass the tag name (e.g., v2026.0.0) to Gradle
+          RELEASE_VERSION: ${{ github.ref_name }} 
+          USER_GITHUB_NAME: ${{ github.actor }}
+          USER_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
