@@ -6,7 +6,30 @@ plugins {
     id 'maven-publish'
 }
 
-version = project.property('project-version')
+// --- DYNAMIC VERSIONING LOGIC ---
+// 1. Detect Build Environment
+String buildNum = System.getenv("BUILD_NUMBER")
+boolean isDevBuild = (buildNum != null && !buildNum.isEmpty())
+
+// 2. Calculate the Version String IMMEDIATELY
+String calculatedVersion = "unspecified"
+
+// Check for the property defined in gradle.properties
+if (project.hasProperty('project-version')) {
+    def baseVersion = project.property('project-version')
+    
+    if (isDevBuild) {
+        // CI Strategy: "2026.0.0-9-DEV"
+        calculatedVersion = "${baseVersion}-${buildNum}-DEV"
+    } else {
+        // Local Strategy: "2026.0.0-SNAPSHOT"
+        // Appends SNAPSHOT locally to distinguish from release builds
+        calculatedVersion = "${baseVersion}-SNAPSHOT"
+    }
+}
+
+// 3. Apply it to the project
+version = calculatedVersion
 group = project.property('project-group')
 
 repositories {
