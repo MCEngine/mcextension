@@ -17,19 +17,21 @@ String calculatedVersion = "unspecified"
 
 if (releaseTag != null && !releaseTag.isEmpty()) {
     // RELEASE STRATEGY:
-    // If a tag exists (e.g., "v2026.0.0"), use it directly but strip the "v".
-    // Result: "2026.0.0" (Clean, no -SNAPSHOT or -DEV)
+    // If a tag exists (e.g., "v2026.0.0" or "v2026.0.0-1"), use it directly but strip the "v".
+    // Result: "2026.0.0" or "2026.0.0-1"
     calculatedVersion = releaseTag.replace("v", "")
 } else if (project.hasProperty('project-version')) {
     // DEV STRATEGY:
     def baseVersion = project.property('project-version')
+    def iteration = project.hasProperty('project-iteration') ? project.property('project-iteration') : "1"
     
     if (isDevBuild) {
-        // CI Dev Build: "2026.0.0-9-DEV"
-        calculatedVersion = "${baseVersion}-${buildNum}-DEV"
+        // CI Dev Build: "2026.0.0-1-9-DEV"
+        // Format: {Version}-{Iteration}-{BuildNum}-DEV
+        calculatedVersion = "${baseVersion}-${iteration}-${buildNum}-DEV"
     } else {
-        // Local Build: "2026.0.0-SNAPSHOT"
-        calculatedVersion = "${baseVersion}-SNAPSHOT"
+        // Local Build: "2026.0.0-1-SNAPSHOT"
+        calculatedVersion = "${baseVersion}-${iteration}-SNAPSHOT"
     }
 }
 

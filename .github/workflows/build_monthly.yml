@@ -53,8 +53,16 @@ jobs:
       - name: Update gradle.properties
         run: |
           NEW_VERSION=${{ steps.versioning.outputs.new_version }}
+          
+          # 1. Update Version (e.g., 2026.0.2)
           sed -i "s/^project-version=.*/project-version=$NEW_VERSION/" gradle.properties
+          
+          # 2. Reset Iteration to 1 (So next dev build starts at 1)
+          sed -i "s/^project-iteration=.*/project-iteration=1/" gradle.properties
+          
+          # Verify
           grep "project-version" gradle.properties
+          grep "project-iteration" gradle.properties
 
       - name: Build and Publish Package
         run: ./gradlew clean build publish
