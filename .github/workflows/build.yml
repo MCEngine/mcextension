@@ -35,8 +35,9 @@ jobs:
       - name: Check Iteration
         id: check_iteration
         run: |
-          ITERATION=$(grep 'project-iteration=' gradle.properties | cut -d'=' -f2)
-          VERSION=$(grep 'project-version=' gradle.properties | cut -d'=' -f2)
+          # Adding 'tr -d "\r"' removes hidden Windows carriage returns
+          ITERATION=$(grep 'project-iteration=' gradle.properties | cut -d'=' -f2 | tr -d '\r')
+          VERSION=$(grep 'project-version=' gradle.properties | cut -d'=' -f2 | tr -d '\r')
           echo "iteration=$ITERATION" >> $GITHUB_OUTPUT
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
@@ -94,3 +95,4 @@ jobs:
             !**/build/libs/*-sources.jar
             !**/build/libs/*-javadoc.jar
           retention-days: 1
+
