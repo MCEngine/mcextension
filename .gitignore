@@ -8,6 +8,7 @@ bin/
 # --- [ Java / IDEs ] ---
 *.class
 *.log
+*.jar
 *.war
 *.zip
 .project
