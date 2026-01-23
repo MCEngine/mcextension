@@ -8,9 +8,11 @@ plugins {
 
 // --- DYNAMIC VERSIONING LOGIC ---
 // 1. Detect Build Environment
-String buildNum = System.getenv("BUILD_NUMBER")
+String buildNum = System.getenv("BUILD_NUMBER") // Passed from GitHub Action
+String devRelease = System.getenv("DEV_RELEASE_VERSION") // Passed from GitHub Actions
 String releaseTag = System.getenv("RELEASE_VERSION") // Passed from GitHub Actions
 boolean isDevBuild = (buildNum != null && !buildNum.isEmpty())
+boolean isDevRealeaseBuild = (devRelease != null && !devRelease.isEmpty())
 
 // 2. Calculate the Version String IMMEDIATELY
 String calculatedVersion = "unspecified"
@@ -25,12 +27,17 @@ if (releaseTag != null && !releaseTag.isEmpty()) {
     def baseVersion = project.property('project-version')
     def iteration = project.hasProperty('project-iteration') ? project.property('project-iteration') : "1"
     
-    if (isDevBuild) {
+    if (isDevBuild && !isDevRealeaseBuild) {
         // CI Dev Build: "2026.0.0-1-9-DEV"
         // Format: {Version}-{Iteration}-{BuildNum}-DEV
         calculatedVersion = "${baseVersion}-${iteration}-${buildNum}-DEV"
+    } else if (isDevRealeaseBuild) {
+        // CI Dev Release Build: "2026.0.0-1"
+        // Format: {Version}-{Iteration}
+        calculatedVersion = "${baseVersion}-${iteration}"
     } else {
         // Local Build: "2026.0.0-1-SNAPSHOT"
+        // Format: {Version}-{Iteration}-SNAPSHOT
         calculatedVersion = "${baseVersion}-${iteration}-SNAPSHOT"
     }
 }

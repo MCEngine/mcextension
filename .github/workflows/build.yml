@@ -63,14 +63,13 @@ jobs:
 
       # 4c. Build & Publish (RELEASE)
       # Run ONLY when code is pushed/merged to master AND iteration != 0
-      # UPDATED: Added requirement for step 4b (publish_dev) to finish successfully.
+      # UPDATED: Using DEV_RELEASE_VERSION to signal clean versioning in Gradle.
       - name: Publish Release
         id: publish_release
         if: ${{ steps.publish_dev.outcome == 'success' && github.event_name == 'push' && github.ref == 'refs/heads/master' && steps.check_iteration.outputs.iteration != '0' }}
         run: ./gradlew clean build publish
         env:
-          # We pass the branch name (master) to Gradle
-          RELEASE_VERSION: ${{ steps.check_iteration.outputs.version }} 
+          DEV_RELEASE_VERSION: ${{ steps.check_iteration.outputs.version }} 
           USER_GITHUB_NAME: ${{ github.actor }}
           USER_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -95,4 +94,3 @@ jobs:
             !**/build/libs/*-sources.jar
             !**/build/libs/*-javadoc.jar
           retention-days: 1
-
