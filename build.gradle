@@ -1,0 +1,75 @@
+/**
+ * MCExtension Configuration
+ */
+plugins {
+    id 'java'
+    id 'maven-publish'
+}
+
+version = project.property('project-version')
+group = project.property('project-group')
+
+repositories {
+    mavenCentral()
+    // Swapped PaperMC for SpigotMC
+    maven {
+        name = 'spigotmc'
+        url = 'https://hub.spigotmc.org/nexus/content/repositories/snapshots/'
+    }
+    // Spigot API often relies on Sonatype for transitive dependencies (like bungeecord-chat)
+    maven {
+        name = 'sonatype'
+        url = 'https://oss.sonatype.org/content/groups/public/'
+    }
+}
+
+dependencies {
+    // Spigot API
+    compileOnly 'org.spigotmc:spigot-api:1.21.11-R0.2-SNAPSHOT'
+}
+
+def gitOwner = project.property('git-org-name')
+def gitRepo = project.property('git-org-repository')
+def gitUrl = project.property('project-artifact-url')
+
+publishing {
+    publications {
+        create('mavenJava', MavenPublication) {
+            artifactId = project.property('project-artifact-id')
+            
+            // Standard JAR publication
+            from components.java 
+
+            pom {
+                name = project.property('project-artifact-name')
+                description = project.property('project-artifact-description')
+                url = gitUrl
+
+                developers {
+                    developer {
+                        id = 'jetsadawijit'
+                        url = 'https://jetsadawijit.github.io'
+                    }
+                }
+
+                scm {
+                    connection = "scm:git:git://github.com/${gitOwner}/${gitRepo}.git"
+                    developerConnection = "scm:git:ssh://github.com/${gitOwner}/${gitRepo}.git"
+                    url = gitUrl
+                }
+            }
+        }
+    }
+
+    repositories {
+        maven {
+            name = "GitHubPackages"
+            url = uri("https://maven.pkg.github.com/${gitOwner}/${gitRepo}")
+
+            credentials {
+                username = System.getenv("USER_GITHUB_NAME")
+                password = System.getenv("USER_GITHUB_TOKEN")
+            }
+        }
+    }
+}
