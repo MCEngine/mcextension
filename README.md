@@ -62,21 +62,64 @@ public class MyExtension implements IMCExtension {
 Use the `MCExtensionManager` in your main plugin to handle the loading process.
 
 ```java
-public class MyMainPlugin extends JavaPlugin {
-    private MCExtensionManager manager;
+public class MySpigotMCPlugin extends JavaPlugin {
+    private MCExtensionManager extensionManager;
 
     @Override
     public void onEnable() {
-        // Initialize manager with a task executor
-        this.manager = new MCExtensionManager(this, Runnable::run);
-        
-        // Loads all .jar files from /plugins/MyMainPlugin/extensions/
-        this.manager.loadAllExtensions();
+        // Standard Spigot Async Executor
+        Executor spigotExecutor = task -> 
+            Bukkit.getScheduler().runTaskAsynchronously(this, task);
+
+        this.extensionManager = new MCExtensionManager(this, spigotExecutor);
+        this.extensionManager.loadAllExtensions();
     }
 
     @Override
     public void onDisable() {
-        this.manager.disableAllExtensions();
+        if (extensionManager != null) extensionManager.disableAllExtensions();
+    }
+}
+```
+
+```java
+public class MyPaperMCPlugin extends JavaPlugin {
+    private MCExtensionManager extensionManager;
+
+    @Override
+    public void onEnable() {
+        // Modern Paper Async Executor
+        Executor paperExecutor = task -> 
+            Bukkit.getAsyncScheduler().runNow(this, scheduledTask -> task.run());
+
+        this.extensionManager = new MCExtensionManager(this, paperExecutor);
+        this.extensionManager.loadAllExtensions();
+    }
+
+    @Override
+    public void onDisable() {
+        if (extensionManager != null) extensionManager.disableAllExtensions();
+    }
+}
+```
+
+```java
+public class MyFoliaMCPlugin extends JavaPlugin {
+    private MCExtensionManager extensionManager;
+
+    @Override
+    public void onEnable() {
+        // Folia Region-Aware Async Executor
+        Executor foliaExecutor = task -> 
+            Bukkit.getAsyncScheduler().runNow(this, scheduledTask -> task.run());
+
+        this.extensionManager = new MCExtensionManager(this, foliaExecutor);
+        this.extensionManager.loadAllExtensions();
+    }
+
+    @Override
+    public void onDisable() {
+        if (extensionManager != null) extensionManager.disableAllExtensions();
     }
 }
 ```
