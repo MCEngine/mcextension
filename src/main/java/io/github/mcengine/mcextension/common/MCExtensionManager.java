@@ -1,15 +1,16 @@
 package io.github.mcengine.mcextension.common;
 
 import io.github.mcengine.mcextension.api.IMCExtension;
+import org.bukkit.Bukkit;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.yaml.snakeyaml.Yaml;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URL;
 import java.net.URLClassLoader;
-import java.util.Enumeration;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.Executor;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
@@ -23,24 +24,38 @@ import java.util.jar.JarFile;
  */
 public class MCExtensionManager {
 
+    /**
+     * The host plugin instance that owns this manager.
+     */
     private final JavaPlugin plugin;
+
+    /**
+     * The directory where extension JAR files are stored.
+     */
     private final File extensionFolder;
+
+    /**
+     * The executor used for running extension-related tasks.
+     */
     private final Executor executor;
 
-    // Tracks loaded extension metadata: {ID : Version}
+    /**
+     * A map tracking loaded extension metadata, where the key is the extension ID
+     * and the value is the version string.
+     */
     private final Map<String, String> loadedExtensionsInfo = new HashMap<>();
     
-    // Tracks loaded extension instances: {ID : Instance}
+    /**
+     * A map tracking active extension instances, where the key is the extension ID
+     * and the value is the instantiated {@link IMCExtension}.
+     */
     private final Map<String, IMCExtension> loadedInstances = new HashMap<>();
 
     /**
      * Creates a new MCExtensionManager for the given plugin.
-     * <p>
-     * Extensions will be loaded from: {@code plugins/{PluginName}/extensions/}
-     * </p>
      *
      * @param plugin   The host plugin instance.
-     * @param executor The executor responsible for handling extension tasks (e.g., Async/Folia scheduler).
+     * @param executor The executor responsible for handling extension tasks.
      */
     public MCExtensionManager(JavaPlugin plugin, Executor executor) {
         this.plugin = plugin;
@@ -53,7 +68,11 @@ public class MCExtensionManager {
     }
 
     /**
-     * Scans the extension folder and loads all valid .jar files.
+     * Scans the extension folder and loads all valid .jar files with dependency resolution.
+     * <p>
+     * This method uses a multi-pass approach to ensure that extensions are loaded only
+     * after their required dependencies (both base plugins and other extensions) are ready.
+     * </p>
      */
     public void loadAllExtensions() {
         File[] files = extensionFolder.listFiles((dir, name) -> name.endsWith(".jar"));
@@ -63,16 +82,50 @@ public class MCExtensionManager {
             return;
         }
 
-        plugin.getLogger().info("Found " + files.length + " extension(s). Loading...");
+        List<File> pendingFiles = new ArrayList<>(Arrays.asList(files));
+        boolean changed = true;
 
-        for (File file : files) {
-            try {
-                loadExtension(file);
-            } catch (Exception e) {
-                plugin.getLogger().severe("Failed to load extension: " + file.getName());
-                e.printStackTrace();
+        plugin.getLogger().info("Found " + files.length + " extension(s). Resolving dependencies...");
+
+        while (changed && !pendingFiles.isEmpty()) {
+            changed = false;
+            Iterator<File> iterator = pendingFiles.iterator();
+
+            while (iterator.hasNext()) {
+                File file = iterator.next();
+                try {
+                    LoadResult result = loadExtension(file);
+                    if (result == LoadResult.SUCCESS) {
+                        iterator.remove();
+                        changed = true;
+                    } else if (result == LoadResult.FAILED) {
+                        iterator.remove();
+                    }
+                } catch (Exception e) {
+                    plugin.getLogger().severe("Failed to load extension: " + file.getName());
+                    e.printStackTrace();
+                    iterator.remove();
+                }
             }
         }
+
+        if (!pendingFiles.isEmpty()) {
+            for (File file : pendingFiles) {
+                plugin.getLogger().severe("Could not load " + file.getName() + ": Dependency requirements not met.");
+            }
+        }
+    }
+
+    /**
+     * Represents the result of an individual extension load attempt.
+     */
+    private enum LoadResult { 
+        /** Extension was loaded successfully. */
+        SUCCESS, 
+        /** Extension failed to load due to missing data or errors. */
+        FAILED, 
+        /** Extension is waiting for its dependencies to be loaded. */
+        WAITING 
     }
 
     /**
@@ -94,7 +147,6 @@ public class MCExtensionManager {
             plugin.getLogger().severe("Error disabling extension " + id);
             e.printStackTrace();
         } finally {
-            // Remove from registry regardless of success/failure to ensure clean state
             loadedInstances.remove(id);
             loadedExtensionsInfo.remove(id);
         }
@@ -102,97 +154,115 @@ public class MCExtensionManager {
     }
 
     /**
-     * Disables all loaded extensions and clears the registry.
+     * Disables all currently loaded extensions and clears the internal registries.
      */
     public void disableAllExtensions() {
-        // Create a copy of values to avoid ConcurrentModificationException during iteration
-        for (IMCExtension extension : new HashMap<>(loadedInstances).values()) {
-            try {
-                extension.onDisable(plugin, executor);
-            } catch (Exception e) {
-                plugin.getLogger().severe("Error disabling extension " + extension.getId());
-                e.printStackTrace();
-            }
+        for (String id : new HashMap<>(loadedInstances).keySet()) {
+            disableExtension(id);
         }
         loadedExtensionsInfo.clear();
         loadedInstances.clear();
     }
 
     /**
-     * Loads a specific extension JAR file.
+     * Logic for loading a single extension JAR.
+     * <p>
+     * This involves reading the nested extension.yml, verifying base plugin dependencies,
+     * checking for other required extensions, and performing reflective instantiation.
+     * </p>
      *
-     * @param jarFile The JAR file to load.
-     * @throws IOException If file access fails.
-     * @throws ReflectiveOperationException If any reflection error occurs (ClassNotFound, NoSuchMethod, etc.).
+     * @param jarFile The JAR file to attempt to load.
+     * @return The {@link LoadResult} indicating success, failure, or a dependency-induced wait.
+     * @throws IOException If the file cannot be read.
+     * @throws ReflectiveOperationException If the main class cannot be found or instantiated.
      */
-    private void loadExtension(File jarFile) throws IOException, ReflectiveOperationException {
-        // 1. Setup ClassLoader (Parent is the plugin's loader so extension can see Bukkit/Plugin API)
-        URL[] urls = {jarFile.toURI().toURL()};
-        URLClassLoader loader = new URLClassLoader(urls, plugin.getClass().getClassLoader());
+    private LoadResult loadExtension(File jarFile) throws IOException, ReflectiveOperationException {
+        String mainClassName = null;
+        String id = null;
+        String version = "1.0.0";
+        
+        List<String> baseDepend = new ArrayList<>();
+        List<String> extDepend = new ArrayList<>();
 
-        // 2. Scan JAR to find the class implementing IMCExtension
-        Class<?> mainClass = null;
-
+        // 1. Read extension.yml from the JAR
         try (JarFile jar = new JarFile(jarFile)) {
-            Enumeration<JarEntry> entries = jar.entries();
-            
-            while (entries.hasMoreElements()) {
-                JarEntry entry = entries.nextElement();
-                if (entry.isDirectory() || !entry.getName().endsWith(".class")) continue;
+            JarEntry entry = jar.getJarEntry("extension.yml");
+            if (entry == null) return LoadResult.FAILED;
 
-                // Convert path to class name (e.g., com/example/Main.class -> com.example.Main)
-                String className = entry.getName().replace('/', '.').replace(".class", "");
-
-                try {
-                    // Load the class strictly to check compatibility
-                    Class<?> clazz = loader.loadClass(className);
+            try (InputStream input = jar.getInputStream(entry)) {
+                Yaml yaml = new Yaml();
+                Map<String, Object> data = yaml.load(input);
+                if (data != null) {
+                    id = (String) data.get("name");
+                    mainClassName = (String) data.get("main");
+                    version = String.valueOf(data.getOrDefault("version", "1.0.0"));
                     
-                    // Enforce usage of IMCExtension interface
-                    if (IMCExtension.class.isAssignableFrom(clazz) && !clazz.isInterface()) {
-                        mainClass = clazz;
-                        break; // Found the entry point
+                    // Navigate Nested Map for 'base'
+                    if (data.get("base") instanceof Map) {
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> baseSection = (Map<String, Object>) data.get("base");
+                        if (baseSection.get("depend") instanceof List) {
+                            @SuppressWarnings("unchecked")
+                            List<String> castList = (List<String>) baseSection.get("depend");
+                            baseDepend = castList;
+                        }
                     }
-                } catch (ClassNotFoundException | NoClassDefFoundError ignored) {
-                    // Skip classes that fail to load (e.g., optional dependencies missing)
+
+                    // Navigate Nested Map for 'extension'
+                    if (data.get("extension") instanceof Map) {
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> extSection = (Map<String, Object>) data.get("extension");
+                        if (extSection.get("depend") instanceof List) {
+                            @SuppressWarnings("unchecked")
+                            List<String> castList = (List<String>) extSection.get("depend");
+                            extDepend = castList;
+                        }
+                    }
                 }
             }
         }
 
-        if (mainClass == null) {
-            plugin.getLogger().warning("Skipping " + jarFile.getName() + ": No class implementing IMCExtension found.");
-            return;
+        if (id == null || mainClassName == null) return LoadResult.FAILED;
+
+        // 2. Check Base Plugin Dependencies
+        for (String dep : baseDepend) {
+            if (!Bukkit.getPluginManager().isPluginEnabled(dep)) {
+                plugin.getLogger().warning("Skipping " + id + ": Missing base plugin '" + dep + "'");
+                return LoadResult.FAILED;
+            }
         }
 
-        // 3. Instantiate the Extension
-        // Updated to use Constructor.newInstance() instead of deprecated Class.newInstance()
-        IMCExtension extension = (IMCExtension) mainClass.getDeclaredConstructor().newInstance();
-        String id = extension.getId();
-        String version = extension.getVersion();
-
-        // 4. Duplicate ID Check
-        if (loadedExtensionsInfo.containsKey(id)) {
-            plugin.getLogger().warning("Skipping " + jarFile.getName() + ": Duplicate Extension ID '" + id + "' already loaded.");
-            return;
+        // 3. Check Extension Dependencies
+        for (String dep : extDepend) {
+            if (!loadedInstances.containsKey(dep)) return LoadResult.WAITING;
         }
 
-        // 5. Lifecycle: Load
+        // 4. Load Classes and Instantiate
+        URL[] urls = {jarFile.toURI().toURL()};
+        URLClassLoader loader = new URLClassLoader(urls, plugin.getClass().getClassLoader());
+        Class<?> clazz = loader.loadClass(mainClassName);
+        
+        if (!IMCExtension.class.isAssignableFrom(clazz)) return LoadResult.FAILED;
+        if (loadedExtensionsInfo.containsKey(id)) return LoadResult.FAILED;
+
+        IMCExtension extension = (IMCExtension) clazz.getDeclaredConstructor().newInstance();
+        
         try {
             extension.onLoad(plugin, executor);
-            
-            // 6. Register
             loadedExtensionsInfo.put(id, version);
             loadedInstances.put(id, extension);
-            
             plugin.getLogger().info("Loaded Extension: " + id + " (v" + version + ")");
+            return LoadResult.SUCCESS;
         } catch (Exception e) {
-            plugin.getLogger().severe("Error occurred while initializing extension: " + id);
             e.printStackTrace();
+            return LoadResult.FAILED;
         }
     }
-    
+
     /**
-     * Gets a map of loaded extension IDs and their versions.
-     * * @return Map of {ID : Version}
+     * Gets a map of all currently loaded extension IDs and their versions.
+     *
+     * @return An unmodifiable-style copy of the loaded extensions info map.
      */
     public Map<String, String> getLoadedExtensions() {
         return new HashMap<>(loadedExtensionsInfo);
