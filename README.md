@@ -142,4 +142,4 @@ extension:
 
 ## 🔗 Resources
 
-- **Example Project:** [Example Extension](https://github.com/MCEngine/extension)
+- **Example Project:** [Example Extension](https://github.com/MCEngine/mcextension-example)
