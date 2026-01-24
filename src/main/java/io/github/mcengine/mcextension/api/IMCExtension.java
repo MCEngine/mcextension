@@ -50,22 +50,4 @@ public interface IMCExtension {
     default boolean checkUpdate(String url, String token) {
         return false;
     }
-
-    /**
-     * Gets the unique identifier for this extension.
-     * <p>
-     * This ID must be unique within the context of the host plugin.
-     * If another extension with the same ID is already loaded, this one will be rejected.
-     * </p>
-     *
-     * @return A unique string ID (e.g., "DailyRewards", "CustomItems").
-     */
-    String getId();
-
-    /**
-     * Gets the version string of this extension.
-     *
-     * @return The version string (e.g., "1.0.0").
-     */
-    String getVersion();
 }

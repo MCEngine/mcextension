@@ -73,17 +73,6 @@ jobs:
           USER_GITHUB_NAME: ${{ github.actor }}
           USER_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # 4d. Auto Create Tag
-      # Automatically creates a git tag after successful 4c publish.
-      - name: Create Git Tag
-        if: ${{ steps.publish_release.outcome == 'success' }}
-        run: |
-          TAG_NAME="v${{ steps.check_iteration.outputs.version }}"
-          git tag $TAG_NAME
-          git push origin $TAG_NAME
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -94,3 +83,4 @@ jobs:
             !**/build/libs/*-sources.jar
             !**/build/libs/*-javadoc.jar
           retention-days: 1
+

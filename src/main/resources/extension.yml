@@ -1,0 +1,12 @@
+# Example
+name: MyEpicExtension
+version: 1.0.0
+main: io.github.example.EpicExtension
+
+base:
+  depend: [Vault, PlaceholderAPI]
+  softdepend: [Essentials]
+
+extension:
+  depend: [CoreExtension]
+  softdepend: [OptionalModule]
