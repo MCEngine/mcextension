@@ -50,4 +50,18 @@ public interface IMCExtension {
     default boolean checkUpdate(String url, String token) {
         return false;
     }
+
+    /**
+     * Checks the license for this extension.
+     * <p>
+     * By default, this returns true to accommodate extensions sold via platforms 
+     * without built-in license verification code.
+     * </p>
+     * * @param url   The license server URL.
+     * @param token The license token or key.
+     * @return true if the license is valid or if no check is required; false otherwise.
+     */
+    default boolean checkLicense(String url, String token) {
+        return true;
+    }
 }

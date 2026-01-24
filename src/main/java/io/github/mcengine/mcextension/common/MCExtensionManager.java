@@ -2,6 +2,7 @@ package io.github.mcengine.mcextension.common;
 
 import io.github.mcengine.mcextension.api.IMCExtension;
 import org.bukkit.Bukkit;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.yaml.snakeyaml.Yaml;
 
@@ -246,6 +247,22 @@ public class MCExtensionManager {
         if (loadedExtensionsInfo.containsKey(id)) return LoadResult.FAILED;
 
         IMCExtension extension = (IMCExtension) clazz.getDeclaredConstructor().newInstance();
+
+        // 5. License Check (loads from plugins/{main jar}/extensions/{extension name}/config.yml)
+        File extConfigPath = new File(extensionFolder, id + File.separator + "config.yml");
+        String licenseUrl = "";
+        String licenseToken = "";
+
+        if (extConfigPath.exists()) {
+            YamlConfiguration config = YamlConfiguration.loadConfiguration(extConfigPath);
+            licenseUrl = config.getString("license.url", "");
+            licenseToken = config.getString("license.token", "");
+        }
+
+        if (!extension.checkLicense(licenseUrl, licenseToken)) {
+            plugin.getLogger().severe("Extension " + id + " failed license verification! Skipping load.");
+            return LoadResult.FAILED;
+        }
         
         try {
             extension.onLoad(plugin, executor);

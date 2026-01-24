@@ -24,6 +24,8 @@ The core interface defining the identity and lifecycle of an extension.
 
 **Methods:**
 
+- `checkLicense(String url, String token)`: Optional method to verify the extension license. Automatically loads from `plugins/{main jar}/extensions/{ext name}/config.yml`. Returns `true` by default.
+
 - `onLoad(JavaPlugin plugin, Executor executor)`: Triggered when the extension is loaded. Use this to register listeners or initialize logic.
 
 - `onDisable(JavaPlugin plugin, Executor executor)`: Triggered when the extension is disabled. Use this to clean up resources.
@@ -54,7 +56,33 @@ public class MyExtension implements IMCExtension {
     public void onDisable(JavaPlugin plugin, Executor executor) {
         plugin.getLogger().info("MyExtension is shutting down.");
     }
+
+    @Override
+    public boolean checkUpdate(String url, String token) {
+        // Optional: Implement your update logic here
+        // Return true if an update is found
+        return false; 
+    }
+
+    @Override
+    public boolean checkLicense(String url, String token) {
+        // Optional: Implement license verification
+        // If this method returns false, the extension will not load
+        return token != null && !token.isEmpty();
+    }
 }
+```
+
+### ⚙️ Configuration
+
+For extensions that require license verification, the `MCExtensionManager` automatically looks for a configuration file at: `plugins/{HostPlugin}/extensions/{ExtensionName}/config.yml`
+
+**Example `config.yml` structure:**
+
+```yaml
+license:
+  url: "https://api.yourdomain.com/verify"
+  token: "YOUR-LICENSE-KEY-HERE"
 ```
 
 **2. Managing Extensions**
@@ -142,4 +170,4 @@ extension:
 
 ## 🔗 Resources
 
-- **Example Project:** [Example Extension](https://github.com/MCEngine/extension)
+- **Example Project:** [Example Extension](https://github.com/MCEngine/mcextension-example)
