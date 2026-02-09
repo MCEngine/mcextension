@@ -9,6 +9,7 @@ import org.yaml.snakeyaml.Yaml;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URI;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.*;
@@ -26,21 +27,6 @@ import java.util.jar.JarFile;
 public class MCExtensionManager {
 
     /**
-     * The host plugin instance that owns this manager.
-     */
-    private final JavaPlugin plugin;
-
-    /**
-     * The directory where extension JAR files are stored.
-     */
-    private final File extensionFolder;
-
-    /**
-     * The executor used for running extension-related tasks.
-     */
-    private final Executor executor;
-
-    /**
      * A map tracking loaded extension metadata, where the key is the extension ID
      * and the value is the version string.
      */
@@ -53,19 +39,9 @@ public class MCExtensionManager {
     private final Map<String, IMCExtension> loadedInstances = new HashMap<>();
 
     /**
-     * Creates a new MCExtensionManager for the given plugin.
-     *
-     * @param plugin   The host plugin instance.
-     * @param executor The executor responsible for handling extension tasks.
+     * Creates a new MCExtensionManager.
      */
-    public MCExtensionManager(JavaPlugin plugin, Executor executor) {
-        this.plugin = plugin;
-        this.executor = executor;
-        this.extensionFolder = new File(plugin.getDataFolder(), "extensions");
-        
-        if (!extensionFolder.exists()) {
-            extensionFolder.mkdirs();
-        }
+    public MCExtensionManager() {
     }
 
     /**
@@ -74,8 +50,16 @@ public class MCExtensionManager {
      * This method uses a multi-pass approach to ensure that extensions are loaded only
      * after their required dependencies (both base plugins and other extensions) are ready.
      * </p>
+     * * @param plugin   The host plugin instance.
+     * @param executor The executor responsible for handling extension tasks.
      */
-    public void loadAllExtensions() {
+    public void loadAllExtensions(JavaPlugin plugin, Executor executor) {
+        File extensionFolder = new File(plugin.getDataFolder(), "extensions/libs");
+        
+        if (!extensionFolder.exists()) {
+            extensionFolder.mkdirs();
+        }
+
         File[] files = extensionFolder.listFiles((dir, name) -> name.endsWith(".jar"));
         
         if (files == null || files.length == 0) {
@@ -95,7 +79,7 @@ public class MCExtensionManager {
             while (iterator.hasNext()) {
                 File file = iterator.next();
                 try {
-                    LoadResult result = loadExtension(file);
+                    LoadResult result = loadExtension(plugin, executor, file);
                     if (result == LoadResult.SUCCESS) {
                         iterator.remove();
                         changed = true;
@@ -132,10 +116,12 @@ public class MCExtensionManager {
     /**
      * Disables a specific extension by its ID.
      *
-     * @param id The unique ID of the extension to disable.
+     * @param plugin   The host plugin instance.
+     * @param executor The executor responsible for handling extension tasks.
+     * @param id       The unique ID of the extension to disable.
      * @return true if the extension was found and disabled, false if not found.
      */
-    public boolean disableExtension(String id) {
+    public boolean disableExtension(JavaPlugin plugin, Executor executor, String id) {
         if (!loadedInstances.containsKey(id)) {
             return false;
         }
@@ -156,10 +142,12 @@ public class MCExtensionManager {
 
     /**
      * Disables all currently loaded extensions and clears the internal registries.
+     * * @param plugin   The host plugin instance.
+     * @param executor The executor responsible for handling extension tasks.
      */
-    public void disableAllExtensions() {
+    public void disableAllExtensions(JavaPlugin plugin, Executor executor) {
         for (String id : new HashMap<>(loadedInstances).keySet()) {
-            disableExtension(id);
+            disableExtension(plugin, executor, id);
         }
         loadedExtensionsInfo.clear();
         loadedInstances.clear();
@@ -172,12 +160,14 @@ public class MCExtensionManager {
      * checking for other required extensions, and performing reflective instantiation.
      * </p>
      *
-     * @param jarFile The JAR file to attempt to load.
+     * @param plugin   The host plugin instance.
+     * @param executor The executor responsible for handling extension tasks.
+     * @param jarFile  The JAR file to attempt to load.
      * @return The {@link LoadResult} indicating success, failure, or a dependency-induced wait.
      * @throws IOException If the file cannot be read.
      * @throws ReflectiveOperationException If the main class cannot be found or instantiated.
      */
-    private LoadResult loadExtension(File jarFile) throws IOException, ReflectiveOperationException {
+    private LoadResult loadExtension(JavaPlugin plugin, Executor executor, File jarFile) throws IOException, ReflectiveOperationException {
         String mainClassName = null;
         String id = null;
         String version = "1.0.0";
@@ -239,7 +229,8 @@ public class MCExtensionManager {
         }
 
         // 4. Load Classes and Instantiate
-        URL[] urls = {jarFile.toURI().toURL()};
+        URI uri = jarFile.toURI();
+        URL[] urls = {uri.toURL()};
         URLClassLoader loader = new URLClassLoader(urls, plugin.getClass().getClassLoader());
         Class<?> clazz = loader.loadClass(mainClassName);
         
@@ -248,7 +239,9 @@ public class MCExtensionManager {
 
         IMCExtension extension = (IMCExtension) clazz.getDeclaredConstructor().newInstance();
 
-        // 5. License Check (loads from plugins/{main jar}/extensions/{extension name}/config.yml)
+        // 5. License Check (loads from plugins/{main jar}/extensions/libs/{extension name}/config.yml)
+        // Note: Keeping standard path structure, but inside extensions/libs as requested.
+        File extensionFolder = new File(plugin.getDataFolder(), "extensions/libs");
         File extConfigPath = new File(extensionFolder, id + File.separator + "config.yml");
         String licenseUrl = "";
         String licenseToken = "";
