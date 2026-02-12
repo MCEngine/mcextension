@@ -231,41 +231,42 @@ public class MCExtensionManager {
         // 4. Load Classes and Instantiate
         URI uri = jarFile.toURI();
         URL[] urls = {uri.toURL()};
-        URLClassLoader loader = new URLClassLoader(urls, plugin.getClass().getClassLoader());
-        Class<?> clazz = loader.loadClass(mainClassName);
-        
-        if (!IMCExtension.class.isAssignableFrom(clazz)) return LoadResult.FAILED;
-        if (loadedExtensionsInfo.containsKey(id)) return LoadResult.FAILED;
+        try (URLClassLoader loader = new URLClassLoader(urls, plugin.getClass().getClassLoader())) {
+            Class<?> clazz = loader.loadClass(mainClassName);
+            
+            if (!IMCExtension.class.isAssignableFrom(clazz)) return LoadResult.FAILED;
+            if (loadedExtensionsInfo.containsKey(id)) return LoadResult.FAILED;
 
-        IMCExtension extension = (IMCExtension) clazz.getDeclaredConstructor().newInstance();
+            IMCExtension extension = (IMCExtension) clazz.getDeclaredConstructor().newInstance();
 
-        // 5. License Check (loads from plugins/{main jar}/extensions/libs/{extension name}/config.yml)
-        // Note: Keeping standard path structure, but inside extensions/libs as requested.
-        File extensionFolder = new File(plugin.getDataFolder(), "extensions/libs");
-        File extConfigPath = new File(extensionFolder, id + File.separator + "config.yml");
-        String licenseUrl = "";
-        String licenseToken = "";
+            // 5. License Check (loads from plugins/{main jar}/extensions/libs/{extension name}/config.yml)
+            // Note: Keeping standard path structure, but inside extensions/libs as requested.
+            File extensionFolder = new File(plugin.getDataFolder(), "extensions/libs");
+            File extConfigPath = new File(extensionFolder, id + File.separator + "config.yml");
+            String licenseUrl = "";
+            String licenseToken = "";
 
-        if (extConfigPath.exists()) {
-            YamlConfiguration config = YamlConfiguration.loadConfiguration(extConfigPath);
-            licenseUrl = config.getString("license.url", "");
-            licenseToken = config.getString("license.token", "");
-        }
+            if (extConfigPath.exists()) {
+                YamlConfiguration config = YamlConfiguration.loadConfiguration(extConfigPath);
+                licenseUrl = config.getString("license.url", "");
+                licenseToken = config.getString("license.token", "");
+            }
 
-        if (!extension.checkLicense(licenseUrl, licenseToken)) {
-            plugin.getLogger().severe("Extension " + id + " failed license verification! Skipping load.");
-            return LoadResult.FAILED;
-        }
-        
-        try {
-            extension.onLoad(plugin, executor);
-            loadedExtensionsInfo.put(id, version);
-            loadedInstances.put(id, extension);
-            plugin.getLogger().info("Loaded Extension: " + id + " (v" + version + ")");
-            return LoadResult.SUCCESS;
-        } catch (Exception e) {
-            e.printStackTrace();
-            return LoadResult.FAILED;
+            if (!extension.checkLicense(licenseUrl, licenseToken)) {
+                plugin.getLogger().severe("Extension " + id + " failed license verification! Skipping load.");
+                return LoadResult.FAILED;
+            }
+            
+            try {
+                extension.onLoad(plugin, executor);
+                loadedExtensionsInfo.put(id, version);
+                loadedInstances.put(id, extension);
+                plugin.getLogger().info("Loaded Extension: " + id + " (v" + version + ")");
+                return LoadResult.SUCCESS;
+            } catch (Exception e) {
+                e.printStackTrace();
+                return LoadResult.FAILED;
+            }
         }
     }
 
