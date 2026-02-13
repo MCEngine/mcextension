@@ -21,19 +21,7 @@ public final class MCExtensionGitHub {
 
     public static boolean checkUpdate(JavaPlugin plugin, String owner, String repository, String currentVersion, String token) {
         try {
-            String apiUrl = "https://api.github.com/repos/" + owner + "/" + repository + "/releases/latest";
-            String body = fetchString(apiUrl, token);
-            if (body == null || body.isEmpty()) {
-                return false;
-            }
-            String latest = extractJsonValue(body, "tag_name");
-            if (latest == null || latest.isEmpty()) {
-                latest = extractJsonValue(body, "name");
-            }
-            if (latest == null || latest.isEmpty()) {
-                return false;
-            }
-            return isNewerVersion(latest, currentVersion);
+            return MCUtil.compareVersion("github", currentVersion, owner, repository, token);
         } catch (Exception e) {
             plugin.getLogger().warning("GitHub update check failed: " + e.getMessage());
             return false;
@@ -57,30 +45,6 @@ public final class MCExtensionGitHub {
             plugin.getLogger().warning("GitHub download failed: " + e.getMessage());
             return false;
         }
-    }
-
-    private static boolean isNewerVersion(String latest, String current) {
-        try {
-            var method = MCUtil.class.getMethod("compareVersions", String.class, String.class);
-            Object result = method.invoke(null, latest, current);
-            if (result instanceof Integer i) {
-                return i > 0;
-            }
-            if (result instanceof Boolean b) {
-                return b;
-            }
-        } catch (Exception ignored) {
-            // fallback below
-        }
-        try {
-            var method = MCUtil.class.getMethod("isNewerVersion", String.class, String.class);
-            Object result = method.invoke(null, current, latest);
-            if (result instanceof Boolean b) {
-                return b;
-            }
-        } catch (Exception ignored) {
-        }
-        return !latest.equals(current);
     }
 
     private static String fetchString(String url, String token) throws IOException {
