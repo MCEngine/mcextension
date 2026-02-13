@@ -23,7 +23,7 @@ public final class MCExtensionGitLab {
 
     public static boolean checkUpdate(JavaPlugin plugin, String owner, String repository, String currentVersion, String token) {
         try {
-            return MCUtil.compareVersion("github", currentVersion, owner, repository, token);
+            return MCUtil.compareVersion("gitlab", currentVersion, owner, repository, token);
         } catch (Exception e) {
             plugin.getLogger().warning("GitLab update check failed: " + e.getMessage());
             return false;
@@ -99,17 +99,6 @@ public final class MCExtensionGitLab {
             conn.setRequestProperty("PRIVATE-TOKEN", token);
         }
         return conn;
-    }
-
-    private static String extractJsonValue(String body, String key) {
-        String needle = '"' + key + '"' + ':';
-        int idx = body.indexOf(needle);
-        if (idx < 0) return null;
-        int start = body.indexOf('"', idx + needle.length());
-        if (start < 0) return null;
-        int end = body.indexOf('"', start + 1);
-        if (end < 0) return null;
-        return body.substring(start + 1, end).trim();
     }
 
     private static String findJarUrl(String body, String key) {

@@ -95,17 +95,6 @@ public final class MCExtensionGitHub {
         return conn;
     }
 
-    private static String extractJsonValue(String body, String key) {
-        String needle = '"' + key + '"' + ':';
-        int idx = body.indexOf(needle);
-        if (idx < 0) return null;
-        int start = body.indexOf('"', idx + needle.length());
-        if (start < 0) return null;
-        int end = body.indexOf('"', start + 1);
-        if (end < 0) return null;
-        return body.substring(start + 1, end).trim();
-    }
-
     private static String findJarUrl(String body, String key) {
         String lower = body.toLowerCase(Locale.ROOT);
         String search = key.toLowerCase(Locale.ROOT);
