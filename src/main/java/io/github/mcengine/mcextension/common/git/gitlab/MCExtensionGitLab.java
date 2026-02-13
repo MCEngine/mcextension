@@ -23,6 +23,10 @@ public final class MCExtensionGitLab {
 
     public static boolean checkUpdate(JavaPlugin plugin, String owner, String repository, String currentVersion, String token) {
         try {
+            if (owner == null || owner.isBlank() || repository == null || repository.isBlank()) {
+                plugin.getLogger().warning("GitLab update check skipped: owner/repository not configured");
+                return false;
+            }
             return MCUtil.compareVersion("gitlab", currentVersion, owner, repository, token);
         } catch (Exception e) {
             plugin.getLogger().warning("GitLab update check failed: " + e.getMessage());
@@ -32,6 +36,10 @@ public final class MCExtensionGitLab {
 
     public static boolean downloadUpdate(JavaPlugin plugin, String owner, String repository, String token, File destination) {
         try {
+            if (owner == null || owner.isBlank() || repository == null || repository.isBlank()) {
+                plugin.getLogger().warning("GitLab download skipped: owner/repository not configured");
+                return false;
+            }
             String project = URLEncoder.encode(owner + "/" + repository, StandardCharsets.UTF_8);
             String apiUrl = "https://gitlab.com/api/v4/projects/" + project + "/releases";
             String body = fetchString(apiUrl, token);

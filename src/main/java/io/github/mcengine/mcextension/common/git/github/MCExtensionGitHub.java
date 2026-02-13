@@ -21,6 +21,10 @@ public final class MCExtensionGitHub {
 
     public static boolean checkUpdate(JavaPlugin plugin, String owner, String repository, String currentVersion, String token) {
         try {
+            if (owner == null || owner.isBlank() || repository == null || repository.isBlank()) {
+                plugin.getLogger().warning("GitHub update check skipped: owner/repository not configured");
+                return false;
+            }
             return MCUtil.compareVersion("github", currentVersion, owner, repository, token);
         } catch (Exception e) {
             plugin.getLogger().warning("GitHub update check failed: " + e.getMessage());
@@ -30,6 +34,10 @@ public final class MCExtensionGitHub {
 
     public static boolean downloadUpdate(JavaPlugin plugin, String owner, String repository, String token, File destination) {
         try {
+            if (owner == null || owner.isBlank() || repository == null || repository.isBlank()) {
+                plugin.getLogger().warning("GitHub download skipped: owner/repository not configured");
+                return false;
+            }
             String apiUrl = "https://api.github.com/repos/" + owner + "/" + repository + "/releases/latest";
             String body = fetchString(apiUrl, token);
             if (body == null) {
