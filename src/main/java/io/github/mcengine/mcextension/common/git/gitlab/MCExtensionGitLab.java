@@ -1,0 +1,169 @@
+package io.github.mcengine.mcextension.common.git.gitlab;
+
+import io.github.mcengine.mcutil.MCUtil;
+import org.bukkit.plugin.java.JavaPlugin;
+
+import java.io.BufferedInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
+import java.util.Locale;
+
+public final class MCExtensionGitLab {
+
+    private MCExtensionGitLab() {}
+
+    public static boolean checkUpdate(JavaPlugin plugin, String owner, String repository, String currentVersion, String token) {
+        try {
+            String project = URLEncoder.encode(owner + "/" + repository, StandardCharsets.UTF_8);
+            String apiUrl = "https://gitlab.com/api/v4/projects/" + project + "/releases";
+            String body = fetchString(apiUrl, token);
+            if (body == null || body.isEmpty()) {
+                return false;
+            }
+            String latest = extractJsonValue(body, "tag_name");
+            if (latest == null || latest.isEmpty()) {
+                latest = extractJsonValue(body, "name");
+            }
+            if (latest == null || latest.isEmpty()) {
+                return false;
+            }
+            return isNewerVersion(latest, currentVersion);
+        } catch (Exception e) {
+            plugin.getLogger().warning("GitLab update check failed: " + e.getMessage());
+            return false;
+        }
+    }
+
+    public static boolean downloadUpdate(JavaPlugin plugin, String owner, String repository, String token, File destination) {
+        try {
+            String project = URLEncoder.encode(owner + "/" + repository, StandardCharsets.UTF_8);
+            String apiUrl = "https://gitlab.com/api/v4/projects/" + project + "/releases";
+            String body = fetchString(apiUrl, token);
+            if (body == null) {
+                return false;
+            }
+            String assetUrl = findJarUrl(body, "direct_asset_url");
+            if (assetUrl == null) {
+                assetUrl = findJarUrl(body, "url");
+            }
+            if (assetUrl == null) {
+                plugin.getLogger().warning("No downloadable jar asset found for GitLab release " + owner + "/" + repository);
+                return false;
+            }
+            return downloadToFile(assetUrl, token, destination);
+        } catch (Exception e) {
+            plugin.getLogger().warning("GitLab download failed: " + e.getMessage());
+            return false;
+        }
+    }
+
+    private static boolean isNewerVersion(String latest, String current) {
+        try {
+            var method = MCUtil.class.getMethod("compareVersions", String.class, String.class);
+            Object result = method.invoke(null, latest, current);
+            if (result instanceof Integer i) {
+                return i > 0;
+            }
+            if (result instanceof Boolean b) {
+                return b;
+            }
+        } catch (Exception ignored) {
+            // fallback below
+        }
+        try {
+            var method = MCUtil.class.getMethod("isNewerVersion", String.class, String.class);
+            Object result = method.invoke(null, current, latest);
+            if (result instanceof Boolean b) {
+                return b;
+            }
+        } catch (Exception ignored) {
+        }
+        return !latest.equals(current);
+    }
+
+    private static String fetchString(String url, String token) throws IOException {
+        HttpURLConnection conn = open(url, token);
+        if (conn.getResponseCode() >= 300 && conn.getResponseCode() < 400) {
+            String location = conn.getHeaderField("Location");
+            if (location != null) {
+                conn.disconnect();
+                conn = open(location, token);
+            }
+        }
+        try (InputStream in = new BufferedInputStream(conn.getInputStream());
+             ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            in.transferTo(out);
+            return out.toString();
+        } finally {
+            conn.disconnect();
+        }
+    }
+
+    private static boolean downloadToFile(String url, String token, File destination) throws IOException {
+        HttpURLConnection conn = open(url, token);
+        if (conn.getResponseCode() >= 300 && conn.getResponseCode() < 400) {
+            String location = conn.getHeaderField("Location");
+            if (location != null) {
+                conn.disconnect();
+                conn = open(location, token);
+            }
+        }
+        destination.getParentFile().mkdirs();
+        File temp = new File(destination.getParentFile(), destination.getName() + ".tmp");
+        try (InputStream in = conn.getInputStream(); FileOutputStream out = new FileOutputStream(temp)) {
+            in.transferTo(out);
+        } finally {
+            conn.disconnect();
+        }
+        Files.move(temp.toPath(), destination.toPath(), StandardCopyOption.REPLACE_EXISTING);
+        return true;
+    }
+
+    private static HttpURLConnection open(String url, String token) throws IOException {
+        HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
+        conn.setInstanceFollowRedirects(false);
+        conn.setRequestProperty("User-Agent", "MCExtension-Updater");
+        if (token != null && !token.isBlank()) {
+            conn.setRequestProperty("PRIVATE-TOKEN", token);
+        }
+        return conn;
+    }
+
+    private static String extractJsonValue(String body, String key) {
+        String needle = '"' + key + '"' + ':';
+        int idx = body.indexOf(needle);
+        if (idx < 0) return null;
+        int start = body.indexOf('"', idx + needle.length());
+        if (start < 0) return null;
+        int end = body.indexOf('"', start + 1);
+        if (end < 0) return null;
+        return body.substring(start + 1, end).trim();
+    }
+
+    private static String findJarUrl(String body, String key) {
+        String lower = body.toLowerCase(Locale.ROOT);
+        String search = key.toLowerCase(Locale.ROOT);
+        int idx = lower.indexOf(search);
+        while (idx >= 0) {
+            int start = body.indexOf('"', idx + search.length());
+            if (start < 0) break;
+            int end = body.indexOf('"', start + 1);
+            if (end < 0) break;
+            String url = body.substring(start + 1, end);
+            if (url.toLowerCase(Locale.ROOT).endsWith(".jar")) {
+                return url;
+            }
+            idx = lower.indexOf(search, end);
+        }
+        return null;
+    }
+}
