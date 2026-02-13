@@ -52,8 +52,13 @@ public final class MCExtensionGitHub {
                     assetUrl = "https://github.com/" + owner + "/" + repository + "/releases/download/" + tag + "/" + assetName;
                     plugin.getLogger().info("GitHub release asset fallback resolved for " + owner + "/" + repository + " -> " + assetUrl);
                 } else {
-                    plugin.getLogger().warning("No downloadable jar asset found for GitHub release " + owner + "/" + repository + "; tag=" + tag + ", asset=" + assetName);
-                    return false;
+                    assetUrl = findAnyJarUrl(body);
+                    if (assetUrl == null) {
+                        plugin.getLogger().warning("No downloadable jar asset found for GitHub release " + owner + "/" + repository + "; tag=" + tag + ", asset=" + assetName);
+                        return false;
+                    } else {
+                        plugin.getLogger().info("GitHub release asset fallback (any jar) resolved for " + owner + "/" + repository + " -> " + assetUrl);
+                    }
                 }
             }
             return downloadToFile(assetUrl, token, destination);
@@ -125,6 +130,26 @@ public final class MCExtensionGitHub {
                 return url;
             }
             idx = lower.indexOf(search, end);
+        }
+        return null;
+    }
+
+    private static String findAnyJarUrl(String body) {
+        String lower = body.toLowerCase(Locale.ROOT);
+        int idx = lower.indexOf("http");
+        while (idx >= 0) {
+            int end = lower.indexOf(".jar", idx);
+            if (end > idx) {
+                // include protocol through .jar
+                int space = lower.indexOf('"', end);
+                int newline = lower.indexOf('\n', end);
+                int stop = Math.min(space > 0 ? space : lower.length(), newline > 0 ? newline : lower.length());
+                String url = body.substring(idx, stop).replace("\\", "").replace("\"", "").trim();
+                if (url.toLowerCase(Locale.ROOT).endsWith(".jar")) {
+                    return url;
+                }
+            }
+            idx = lower.indexOf("http", idx + 1);
         }
         return null;
     }
