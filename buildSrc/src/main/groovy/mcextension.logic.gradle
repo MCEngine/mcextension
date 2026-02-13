@@ -26,7 +26,7 @@ repositories {
     }
     // GitHub Packages for MCUtil
     maven {
-        url = uri("https://maven.pkg.github.com/MCEngine/mcextension")
+        url = uri("https://maven.pkg.github.com/MCEngine/mcutil")
         credentials {
             // Priority: Project Property -> Custom Env Var -> GitHub Default Env Var
             username = project.findProperty('gpr.user') ?: System.getenv('USER_GITHUB_NAME') ?: System.getenv('GITHUB_ACTOR')
