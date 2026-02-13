@@ -52,8 +52,20 @@ public final class MCExtensionGitLab {
                 assetUrl = findJarUrl(body, "url");
             }
             if (assetUrl == null) {
-                plugin.getLogger().warning("No downloadable jar asset found for GitLab release " + owner + "/" + repository);
-                return false;
+                String tag = findSimpleValue(body, "tag_name");
+                String assetName = findAssetName(body);
+                if (tag != null && assetName != null && assetName.toLowerCase(Locale.ROOT).endsWith(".jar")) {
+                    assetUrl = "https://gitlab.com/" + owner + "/" + repository + "/-/releases/" + tag + "/downloads/" + assetName;
+                    plugin.getLogger().info("GitLab release asset fallback resolved for " + owner + "/" + repository + " -> " + assetUrl);
+                } else {
+                    assetUrl = findAnyJarUrl(body);
+                    if (assetUrl == null) {
+                        plugin.getLogger().warning("No downloadable jar asset found for GitLab release " + owner + "/" + repository + "; tag=" + tag + ", asset=" + assetName);
+                        return false;
+                    } else {
+                        plugin.getLogger().info("GitLab release asset fallback (any jar) resolved for " + owner + "/" + repository + " -> " + assetUrl);
+                    }
+                }
             }
             return downloadToFile(assetUrl, token, destination);
         } catch (Exception e) {
@@ -124,6 +136,68 @@ public final class MCExtensionGitLab {
                 return url;
             }
             idx = lower.indexOf(search, end);
+        }
+        return null;
+    }
+
+    private static String findSimpleValue(String body, String key) {
+        String lower = body.toLowerCase(Locale.ROOT);
+        String search = '"' + key.toLowerCase(Locale.ROOT) + '"';
+        int idx = lower.indexOf(search);
+        if (idx < 0) {
+            return null;
+        }
+        int start = body.indexOf('"', idx + search.length());
+        if (start < 0) {
+            return null;
+        }
+        int end = body.indexOf('"', start + 1);
+        if (end < 0) {
+            return null;
+        }
+        return body.substring(start + 1, end);
+    }
+
+    private static String findAssetName(String body) {
+        String lower = body.toLowerCase(Locale.ROOT);
+        int assetsIdx = lower.indexOf("\"assets\"");
+        if (assetsIdx < 0) {
+            return null;
+        }
+        int nameIdx = lower.indexOf("\"name\"", assetsIdx);
+        while (nameIdx >= 0) {
+            int start = body.indexOf('"', nameIdx + "\"name\"".length());
+            if (start < 0) {
+                return null;
+            }
+            int end = body.indexOf('"', start + 1);
+            if (end < 0) {
+                return null;
+            }
+            String value = body.substring(start + 1, end);
+            if (value.toLowerCase(Locale.ROOT).endsWith(".jar")) {
+                return value;
+            }
+            nameIdx = lower.indexOf("\"name\"", end);
+        }
+        return null;
+    }
+
+    private static String findAnyJarUrl(String body) {
+        String lower = body.toLowerCase(Locale.ROOT);
+        int idx = lower.indexOf("http");
+        while (idx >= 0) {
+            int end = lower.indexOf(".jar", idx);
+            if (end > idx) {
+                int quote = lower.indexOf('"', end);
+                int newline = lower.indexOf('\n', end);
+                int stop = Math.min(quote > 0 ? quote : lower.length(), newline > 0 ? newline : lower.length());
+                String url = body.substring(idx, stop).replace("\\", "").replace("\"", "").trim();
+                if (url.toLowerCase(Locale.ROOT).endsWith(".jar")) {
+                    return url;
+                }
+            }
+            idx = lower.indexOf("http", idx + 1);
         }
         return null;
     }
