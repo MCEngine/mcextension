@@ -166,7 +166,7 @@ git:
   provider: github         # or gitlab
   owner: my-org            # repo owner/group
   repository: my-repo      # repo name
-  token: ${GITHUB_TOKEN}   # optional for private repos
+  # token omitted: resolved from env (USER_GITHUB_TOKEN / USER_GITLAB_TOKEN) or host plugin config git.token
 ```
 
 ## 🔗 Resources

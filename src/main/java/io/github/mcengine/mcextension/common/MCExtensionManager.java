@@ -153,13 +153,11 @@ public class MCExtensionManager {
         private final String provider;
         private final String owner;
         private final String repository;
-        private final String token;
 
-        private GitInfo(String provider, String owner, String repository, String token) {
+        private GitInfo(String provider, String owner, String repository) {
             this.provider = provider;
             this.owner = owner;
             this.repository = repository;
-            this.token = token;
         }
     }
 
@@ -260,9 +258,10 @@ public class MCExtensionManager {
     private void handleUpdate(JavaPlugin plugin, ExtensionDescriptor descriptor) {
         GitInfo git = descriptor.gitInfo;
         boolean updateAvailable;
+        String token = resolveToken(plugin, git.provider);
         switch (git.provider.toLowerCase(Locale.ROOT)) {
-            case "github" -> updateAvailable = MCExtensionGitHub.checkUpdate(plugin, git.owner, git.repository, descriptor.version, git.token);
-            case "gitlab" -> updateAvailable = MCExtensionGitLab.checkUpdate(plugin, git.owner, git.repository, descriptor.version, git.token);
+            case "github" -> updateAvailable = MCExtensionGitHub.checkUpdate(plugin, git.owner, git.repository, descriptor.version, token);
+            case "gitlab" -> updateAvailable = MCExtensionGitLab.checkUpdate(plugin, git.owner, git.repository, descriptor.version, token);
             default -> {
                 plugin.getLogger().warning("Unknown git provider for extension " + descriptor.id + ": " + git.provider);
                 return;
@@ -275,8 +274,8 @@ public class MCExtensionManager {
 
         File tempFile = new File(descriptor.file.getParentFile(), descriptor.file.getName() + ".update");
         boolean downloaded = switch (git.provider.toLowerCase(Locale.ROOT)) {
-            case "github" -> MCExtensionGitHub.downloadUpdate(plugin, git.owner, git.repository, git.token, tempFile);
-            case "gitlab" -> MCExtensionGitLab.downloadUpdate(plugin, git.owner, git.repository, git.token, tempFile);
+            case "github" -> MCExtensionGitHub.downloadUpdate(plugin, git.owner, git.repository, token, tempFile);
+            case "gitlab" -> MCExtensionGitLab.downloadUpdate(plugin, git.owner, git.repository, token, tempFile);
             default -> false;
         };
 
@@ -366,11 +365,28 @@ public class MCExtensionManager {
         String provider = String.valueOf(map.getOrDefault("provider", "")).trim();
         String owner = String.valueOf(map.getOrDefault("owner", "")).trim();
         String repository = String.valueOf(map.getOrDefault("repository", "")).trim();
-        String token = String.valueOf(map.getOrDefault("token", "")).trim();
         if (provider.isEmpty() || owner.isEmpty() || repository.isEmpty()) {
             return null;
         }
-        return new GitInfo(provider, owner, repository, token);
+        return new GitInfo(provider, owner, repository);
+    }
+
+    private String resolveToken(JavaPlugin plugin, String provider) {
+        String envToken = switch (provider.toLowerCase(Locale.ROOT)) {
+            case "github" -> System.getenv("USER_GITHUB_TOKEN");
+            case "gitlab" -> System.getenv("USER_GITLAB_TOKEN");
+            default -> null;
+        };
+        if (envToken != null && !envToken.isBlank()) {
+            return envToken;
+        }
+        if (plugin.getConfig() != null) {
+            String cfg = plugin.getConfig().getString("git.token", null);
+            if (cfg != null && !cfg.isBlank()) {
+                return cfg;
+            }
+        }
+        return null;
     }
 
     private boolean checkLicense(JavaPlugin plugin, String id, IMCExtension extension) {
