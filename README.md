@@ -161,12 +161,12 @@ name: "MyExtension"
 main: "io.github.mcengine.MyExtension"
 version: "1.0.0"
 extension:
-  depend: [OtherExtID]   # optional: other extensions required
+  depend: [OtherExtID]     # optional: other extensions required
 git:
-  provider: github       # or gitlab
-  owner: my-org          # repo owner/group
-  repository: my-repo    # repo name
-  token: ${GITHUB_TOKEN} # optional for private repos
+  provider: github         # or gitlab
+  owner: my-org            # repo owner/group
+  repository: my-repo      # repo name
+  token: ${GITHUB_TOKEN}   # optional for private repos
 ```
 
 ## 🔗 Resources
