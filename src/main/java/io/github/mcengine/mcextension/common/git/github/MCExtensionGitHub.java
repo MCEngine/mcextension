@@ -46,8 +46,15 @@ public final class MCExtensionGitHub {
             }
             String assetUrl = findJarUrl(body, "browser_download_url");
             if (assetUrl == null) {
-                plugin.getLogger().warning("No downloadable jar asset found for GitHub release " + owner + "/" + repository);
-                return false;
+                String tag = findSimpleValue(body, "tag_name");
+                String assetName = findAssetName(body);
+                if (tag != null && assetName != null && assetName.toLowerCase(Locale.ROOT).endsWith(".jar")) {
+                    assetUrl = "https://github.com/" + owner + "/" + repository + "/releases/download/" + tag + "/" + assetName;
+                    plugin.getLogger().info("GitHub release asset fallback resolved for " + owner + "/" + repository + " -> " + assetUrl);
+                } else {
+                    plugin.getLogger().warning("No downloadable jar asset found for GitHub release " + owner + "/" + repository + "; tag=" + tag + ", asset=" + assetName);
+                    return false;
+                }
             }
             return downloadToFile(assetUrl, token, destination);
         } catch (Exception e) {
@@ -118,6 +125,49 @@ public final class MCExtensionGitHub {
                 return url;
             }
             idx = lower.indexOf(search, end);
+        }
+        return null;
+    }
+
+    private static String findSimpleValue(String body, String key) {
+        String lower = body.toLowerCase(Locale.ROOT);
+        String search = '"' + key.toLowerCase(Locale.ROOT) + '"';
+        int idx = lower.indexOf(search);
+        if (idx < 0) {
+            return null;
+        }
+        int start = body.indexOf('"', idx + search.length());
+        if (start < 0) {
+            return null;
+        }
+        int end = body.indexOf('"', start + 1);
+        if (end < 0) {
+            return null;
+        }
+        return body.substring(start + 1, end);
+    }
+
+    private static String findAssetName(String body) {
+        String lower = body.toLowerCase(Locale.ROOT);
+        int assetsIdx = lower.indexOf("\"assets\"");
+        if (assetsIdx < 0) {
+            return null;
+        }
+        int nameIdx = lower.indexOf("\"name\"", assetsIdx);
+        while (nameIdx >= 0) {
+            int start = body.indexOf('"', nameIdx + "\"name\"".length());
+            if (start < 0) {
+                return null;
+            }
+            int end = body.indexOf('"', start + 1);
+            if (end < 0) {
+                return null;
+            }
+            String value = body.substring(start + 1, end);
+            if (value.toLowerCase(Locale.ROOT).endsWith(".jar")) {
+                return value;
+            }
+            nameIdx = lower.indexOf("\"name\"", end);
         }
         return null;
     }
