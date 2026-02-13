@@ -24,12 +24,12 @@ public final class MCExtensionGitLab {
     public static boolean checkUpdate(JavaPlugin plugin, String owner, String repository, String currentVersion, String token) {
         try {
             if (owner == null || owner.isBlank() || repository == null || repository.isBlank()) {
-                plugin.getLogger().warning("GitLab update check skipped: owner/repository not configured");
+                plugin.getLogger().warning("GitLab update check skipped: owner/repository not configured for repo " + owner + "/" + repository);
                 return false;
             }
             return MCUtil.compareVersion("gitlab", currentVersion, owner, repository, token);
         } catch (Exception e) {
-            plugin.getLogger().warning("GitLab update check failed: " + e.getMessage());
+            plugin.getLogger().warning("GitLab update check failed for " + owner + "/" + repository + ": " + e.getMessage());
             return false;
         }
     }
@@ -37,13 +37,14 @@ public final class MCExtensionGitLab {
     public static boolean downloadUpdate(JavaPlugin plugin, String owner, String repository, String token, File destination) {
         try {
             if (owner == null || owner.isBlank() || repository == null || repository.isBlank()) {
-                plugin.getLogger().warning("GitLab download skipped: owner/repository not configured");
+                plugin.getLogger().warning("GitLab download skipped: owner/repository not configured for repo " + owner + "/" + repository);
                 return false;
             }
             String project = URLEncoder.encode(owner + "/" + repository, StandardCharsets.UTF_8);
             String apiUrl = "https://gitlab.com/api/v4/projects/" + project + "/releases";
             String body = fetchString(apiUrl, token);
             if (body == null) {
+                plugin.getLogger().warning("GitLab download skipped: no release response for " + owner + "/" + repository);
                 return false;
             }
             String assetUrl = findJarUrl(body, "direct_asset_url");
@@ -56,7 +57,7 @@ public final class MCExtensionGitLab {
             }
             return downloadToFile(assetUrl, token, destination);
         } catch (Exception e) {
-            plugin.getLogger().warning("GitLab download failed: " + e.getMessage());
+            plugin.getLogger().warning("GitLab download failed for " + owner + "/" + repository + ": " + e.getMessage());
             return false;
         }
     }

@@ -22,12 +22,12 @@ public final class MCExtensionGitHub {
     public static boolean checkUpdate(JavaPlugin plugin, String owner, String repository, String currentVersion, String token) {
         try {
             if (owner == null || owner.isBlank() || repository == null || repository.isBlank()) {
-                plugin.getLogger().warning("GitHub update check skipped: owner/repository not configured");
+                plugin.getLogger().warning("GitHub update check skipped: owner/repository not configured for repo " + owner + "/" + repository);
                 return false;
             }
             return MCUtil.compareVersion("github", currentVersion, owner, repository, token);
         } catch (Exception e) {
-            plugin.getLogger().warning("GitHub update check failed: " + e.getMessage());
+            plugin.getLogger().warning("GitHub update check failed for " + owner + "/" + repository + ": " + e.getMessage());
             return false;
         }
     }
@@ -35,12 +35,13 @@ public final class MCExtensionGitHub {
     public static boolean downloadUpdate(JavaPlugin plugin, String owner, String repository, String token, File destination) {
         try {
             if (owner == null || owner.isBlank() || repository == null || repository.isBlank()) {
-                plugin.getLogger().warning("GitHub download skipped: owner/repository not configured");
+                plugin.getLogger().warning("GitHub download skipped: owner/repository not configured for repo " + owner + "/" + repository);
                 return false;
             }
             String apiUrl = "https://api.github.com/repos/" + owner + "/" + repository + "/releases/latest";
             String body = fetchString(apiUrl, token);
             if (body == null) {
+                plugin.getLogger().warning("GitHub download skipped: no release response for " + owner + "/" + repository);
                 return false;
             }
             String assetUrl = findJarUrl(body, "browser_download_url");
@@ -50,7 +51,7 @@ public final class MCExtensionGitHub {
             }
             return downloadToFile(assetUrl, token, destination);
         } catch (Exception e) {
-            plugin.getLogger().warning("GitHub download failed: " + e.getMessage());
+            plugin.getLogger().warning("GitHub download failed for " + owner + "/" + repository + ": " + e.getMessage());
             return false;
         }
     }
