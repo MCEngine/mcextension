@@ -1,6 +1,8 @@
 package io.github.mcengine.mcextension.common;
 
 import io.github.mcengine.mcextension.api.IMCExtension;
+import io.github.mcengine.mcextension.common.git.github.MCExtensionGitHub;
+import io.github.mcengine.mcextension.common.git.gitlab.MCExtensionGitLab;
 import org.bukkit.Bukkit;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -9,16 +11,17 @@ import org.yaml.snakeyaml.Yaml;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.URI;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.util.*;
 import java.util.concurrent.Executor;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 
 /**
- * Manages the loading, lifecycle, and tracking of {@link IMCExtension}s.
+ * Manages the loading, lifecycle, updates, and tracking of {@link IMCExtension}s.
  * <p>
  * Each plugin should instantiate its own {@code MCExtensionManager}. This ensures that
  * extensions are isolated per plugin.
@@ -26,42 +29,29 @@ import java.util.jar.JarFile;
  */
 public class MCExtensionManager {
 
-    /**
-     * A map tracking loaded extension metadata, where the key is the extension ID
-     * and the value is the version string.
-     */
-    private final Map<String, String> loadedExtensionsInfo = new HashMap<>();
-    
-    /**
-     * A map tracking active extension instances, where the key is the extension ID
-     * and the value is the instantiated {@link IMCExtension}.
-     */
-    private final Map<String, IMCExtension> loadedInstances = new HashMap<>();
+    private final Map<String, LoadedExtension> loadedExtensions = new HashMap<>();
+    private final Map<String, URLClassLoader> classLoaders = new HashMap<>();
 
-    /**
-     * Creates a new MCExtensionManager.
-     */
     public MCExtensionManager() {
     }
 
     /**
-     * Scans the extension folder and loads all valid .jar files with dependency resolution.
-     * <p>
-     * This method uses a multi-pass approach to ensure that extensions are loaded only
-     * after their required dependencies (both base plugins and other extensions) are ready.
-     * </p>
-     * * @param plugin   The host plugin instance.
+     * Scans the extension folder, completes any pending update renames, and loads all valid .jar files
+     * with extension-only dependency resolution.
+     *
+     * @param plugin   The host plugin instance.
      * @param executor The executor responsible for handling extension tasks.
      */
     public void loadAllExtensions(JavaPlugin plugin, Executor executor) {
         File extensionFolder = new File(plugin.getDataFolder(), "extensions/libs");
-        
-        if (!extensionFolder.exists()) {
-            extensionFolder.mkdirs();
+        if (!extensionFolder.exists() && !extensionFolder.mkdirs()) {
+            plugin.getLogger().severe("Failed to create extension folder: " + extensionFolder.getAbsolutePath());
+            return;
         }
 
+        finalizePendingUpdates(plugin, extensionFolder);
+
         File[] files = extensionFolder.listFiles((dir, name) -> name.endsWith(".jar"));
-        
         if (files == null || files.length == 0) {
             plugin.getLogger().info("No extensions found in " + extensionFolder.getPath());
             return;
@@ -88,7 +78,7 @@ public class MCExtensionManager {
                     }
                 } catch (Exception e) {
                     plugin.getLogger().severe("Failed to load extension: " + file.getName());
-                    e.printStackTrace();
+                    plugin.getLogger().severe(e.getMessage());
                     iterator.remove();
                 }
             }
@@ -96,186 +86,327 @@ public class MCExtensionManager {
 
         if (!pendingFiles.isEmpty()) {
             for (File file : pendingFiles) {
-                plugin.getLogger().severe("Could not load " + file.getName() + ": Dependency requirements not met.");
+                plugin.getLogger().severe("Could not load " + file.getName() + ": extension dependencies not met.");
             }
         }
     }
 
     /**
-     * Represents the result of an individual extension load attempt.
-     */
-    private enum LoadResult { 
-        /** Extension was loaded successfully. */
-        SUCCESS, 
-        /** Extension failed to load due to missing data or errors. */
-        FAILED, 
-        /** Extension is waiting for its dependencies to be loaded. */
-        WAITING 
-    }
-
-    /**
-     * Disables a specific extension by its ID.
+     * Disables a specific extension by its ID and releases its classloader.
      *
      * @param plugin   The host plugin instance.
      * @param executor The executor responsible for handling extension tasks.
      * @param id       The unique ID of the extension to disable.
-     * @return true if the extension was found and disabled, false if not found.
+     * @return true if the extension was found and disabled, false otherwise.
      */
     public boolean disableExtension(JavaPlugin plugin, Executor executor, String id) {
-        if (!loadedInstances.containsKey(id)) {
+        LoadedExtension loaded = loadedExtensions.remove(id);
+        if (loaded == null) {
             return false;
         }
 
-        IMCExtension extension = loadedInstances.get(id);
         try {
-            extension.onDisable(plugin, executor);
+            loaded.instance().onDisable(plugin, executor);
             plugin.getLogger().info("Disabled Extension: " + id);
         } catch (Exception e) {
-            plugin.getLogger().severe("Error disabling extension " + id);
-            e.printStackTrace();
+            plugin.getLogger().severe("Error disabling extension " + id + ": " + e.getMessage());
         } finally {
-            loadedInstances.remove(id);
-            loadedExtensionsInfo.remove(id);
+            closeClassLoader(id);
         }
         return true;
     }
 
     /**
      * Disables all currently loaded extensions and clears the internal registries.
-     * * @param plugin   The host plugin instance.
-     * @param executor The executor responsible for handling extension tasks.
-     */
-    public void disableAllExtensions(JavaPlugin plugin, Executor executor) {
-        for (String id : new HashMap<>(loadedInstances).keySet()) {
-            disableExtension(plugin, executor, id);
-        }
-        loadedExtensionsInfo.clear();
-        loadedInstances.clear();
-    }
-
-    /**
-     * Logic for loading a single extension JAR.
-     * <p>
-     * This involves reading the nested extension.yml, verifying base plugin dependencies,
-     * checking for other required extensions, and performing reflective instantiation.
-     * </p>
      *
      * @param plugin   The host plugin instance.
      * @param executor The executor responsible for handling extension tasks.
-     * @param jarFile  The JAR file to attempt to load.
-     * @return The {@link LoadResult} indicating success, failure, or a dependency-induced wait.
-     * @throws IOException If the file cannot be read.
-     * @throws ReflectiveOperationException If the main class cannot be found or instantiated.
      */
-    private LoadResult loadExtension(JavaPlugin plugin, Executor executor, File jarFile) throws IOException, ReflectiveOperationException {
-        String mainClassName = null;
-        String id = null;
-        String version = "1.0.0";
-        
-        List<String> baseDepend = new ArrayList<>();
-        List<String> extDepend = new ArrayList<>();
+    public void disableAllExtensions(JavaPlugin plugin, Executor executor) {
+        for (String id : new HashMap<>(loadedExtensions).keySet()) {
+            disableExtension(plugin, executor, id);
+        }
+        loadedExtensions.clear();
+        classLoaders.clear();
+    }
 
-        // 1. Read extension.yml from the JAR
+    /**
+     * Gets a copy of all currently loaded extension IDs and their versions.
+     *
+     * @return map of id -> version
+     */
+    public Map<String, String> getLoadedExtensions() {
+        Map<String, String> info = new HashMap<>();
+        for (Map.Entry<String, LoadedExtension> entry : loadedExtensions.entrySet()) {
+            info.put(entry.getKey(), entry.getValue().version());
+        }
+        return info;
+    }
+
+    private enum LoadResult {
+        SUCCESS,
+        FAILED,
+        WAITING
+    }
+
+    private static class GitInfo {
+        private final String provider;
+        private final String owner;
+        private final String repository;
+        private final String token;
+
+        private GitInfo(String provider, String owner, String repository, String token) {
+            this.provider = provider;
+            this.owner = owner;
+            this.repository = repository;
+            this.token = token;
+        }
+    }
+
+    private record LoadedExtension(String id, String version, IMCExtension instance, File file, GitInfo gitInfo) {}
+
+    private void finalizePendingUpdates(JavaPlugin plugin, File extensionFolder) {
+        File[] pending = extensionFolder.listFiles((dir, name) -> name.endsWith(".update") || name.endsWith(".jar.tmp"));
+        if (pending == null || pending.length == 0) {
+            return;
+        }
+
+        for (File file : pending) {
+            String name = file.getName();
+            String base = name.endsWith(".update") ? name.substring(0, name.length() - 7)
+                    : name.substring(0, name.length() - 8);
+            if (!base.endsWith(".jar")) {
+                base = base + ".jar";
+            }
+            File target = new File(extensionFolder, base);
+            if (target.exists() && !target.delete()) {
+                plugin.getLogger().warning("Could not delete old jar while applying pending update: " + target.getName());
+                continue;
+            }
+            try {
+                Files.move(file.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                plugin.getLogger().info("Applied pending update for " + target.getName());
+            } catch (IOException e) {
+                plugin.getLogger().severe("Failed to apply pending update for " + target.getName() + ": " + e.getMessage());
+            }
+        }
+    }
+
+    private LoadResult loadExtension(JavaPlugin plugin, Executor executor, File jarFile) throws IOException, ReflectiveOperationException {
+        ExtensionDescriptor descriptor = readDescriptor(jarFile);
+        if (descriptor == null || descriptor.id == null || descriptor.mainClass == null) {
+            return LoadResult.FAILED;
+        }
+
+        for (String dep : descriptor.extensionDepends) {
+            if (!loadedExtensions.containsKey(dep)) {
+                return LoadResult.WAITING;
+            }
+        }
+
+        if (loadedExtensions.containsKey(descriptor.id)) {
+            plugin.getLogger().warning("Extension already loaded: " + descriptor.id);
+            return LoadResult.FAILED;
+        }
+
+        URL[] urls = {jarFile.toURI().toURL()};
+        URLClassLoader loader = new URLClassLoader(urls, plugin.getClass().getClassLoader());
+        try {
+            Class<?> clazz = loader.loadClass(descriptor.mainClass);
+            if (!IMCExtension.class.isAssignableFrom(clazz)) {
+                plugin.getLogger().severe("Main class does not implement IMCExtension: " + descriptor.mainClass);
+                close(loader);
+                return LoadResult.FAILED;
+            }
+
+            IMCExtension extension = (IMCExtension) clazz.getDeclaredConstructor().newInstance();
+
+            if (!checkLicense(plugin, descriptor.id, extension)) {
+                close(loader);
+                return LoadResult.FAILED;
+            }
+
+            extension.onLoad(plugin, executor);
+            loadedExtensions.put(descriptor.id, new LoadedExtension(descriptor.id, descriptor.version, extension, jarFile, descriptor.gitInfo));
+            classLoaders.put(descriptor.id, loader);
+            plugin.getLogger().info("Loaded Extension: " + descriptor.id + " (v" + descriptor.version + ")");
+
+            triggerAsyncUpdateCheck(plugin, executor, descriptor);
+            return LoadResult.SUCCESS;
+        } catch (Exception e) {
+            plugin.getLogger().severe("Failed to load extension " + descriptor.id + ": " + e.getMessage());
+            close(loader);
+            return LoadResult.FAILED;
+        }
+    }
+
+    private void triggerAsyncUpdateCheck(JavaPlugin plugin, Executor executor, ExtensionDescriptor descriptor) {
+        if (descriptor.gitInfo == null) {
+            return;
+        }
+        try {
+            executor.execute(() -> {
+                try {
+                    handleUpdate(plugin, descriptor);
+                } catch (Exception ex) {
+                    plugin.getLogger().severe("Update check failed for " + descriptor.id + ": " + ex.getMessage());
+                }
+            });
+        } catch (Exception ex) {
+            plugin.getLogger().severe("Could not schedule update check for " + descriptor.id + ": " + ex.getMessage());
+        }
+    }
+
+    private void handleUpdate(JavaPlugin plugin, ExtensionDescriptor descriptor) {
+        GitInfo git = descriptor.gitInfo;
+        boolean updateAvailable;
+        switch (git.provider.toLowerCase(Locale.ROOT)) {
+            case "github" -> updateAvailable = MCExtensionGitHub.checkUpdate(plugin, git.owner, git.repository, descriptor.version, git.token);
+            case "gitlab" -> updateAvailable = MCExtensionGitLab.checkUpdate(plugin, git.owner, git.repository, descriptor.version, git.token);
+            default -> {
+                plugin.getLogger().warning("Unknown git provider for extension " + descriptor.id + ": " + git.provider);
+                return;
+            }
+        }
+
+        if (!updateAvailable) {
+            return;
+        }
+
+        File tempFile = new File(descriptor.file.getParentFile(), descriptor.file.getName() + ".update");
+        boolean downloaded = switch (git.provider.toLowerCase(Locale.ROOT)) {
+            case "github" -> MCExtensionGitHub.downloadUpdate(plugin, git.owner, git.repository, git.token, tempFile);
+            case "gitlab" -> MCExtensionGitLab.downloadUpdate(plugin, git.owner, git.repository, git.token, tempFile);
+            default -> false;
+        };
+
+        if (!downloaded) {
+            return;
+        }
+
+        Bukkit.getScheduler().runTask(plugin, () -> swapAndReload(plugin, descriptor.id, tempFile));
+    }
+
+    private void swapAndReload(JavaPlugin plugin, String id, File downloadedFile) {
+        LoadedExtension loaded = loadedExtensions.get(id);
+        if (loaded == null) {
+            plugin.getLogger().warning("Extension not loaded during swap: " + id);
+            return;
+        }
+
+        File target = loaded.file();
+        disableExtension(plugin, plugin.getServer().getScheduler().getMainThreadExecutor(plugin), id);
+
+        if (target.exists() && !target.delete()) {
+            plugin.getLogger().severe("Could not delete old jar for " + id + "; aborting update.");
+            return;
+        }
+
+        try {
+            Files.move(downloadedFile.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            plugin.getLogger().info("Updated jar swapped for " + id + ". Reloading...");
+            loadExtension(plugin, plugin.getServer().getScheduler().getMainThreadExecutor(plugin), target);
+        } catch (Exception e) {
+            plugin.getLogger().severe("Failed to hot-swap extension " + id + ": " + e.getMessage());
+        }
+    }
+
+    private ExtensionDescriptor readDescriptor(File jarFile) {
         try (JarFile jar = new JarFile(jarFile)) {
             JarEntry entry = jar.getJarEntry("extension.yml");
-            if (entry == null) return LoadResult.FAILED;
+            if (entry == null) {
+                return null;
+            }
 
             try (InputStream input = jar.getInputStream(entry)) {
                 Yaml yaml = new Yaml();
                 Map<String, Object> data = yaml.load(input);
-                if (data != null) {
-                    id = (String) data.get("name");
-                    mainClassName = (String) data.get("main");
-                    version = String.valueOf(data.getOrDefault("version", "1.0.0"));
-                    
-                    // Navigate Nested Map for 'base'
-                    if (data.get("base") instanceof Map) {
-                        @SuppressWarnings("unchecked")
-                        Map<String, Object> baseSection = (Map<String, Object>) data.get("base");
-                        if (baseSection.get("depend") instanceof List) {
-                            @SuppressWarnings("unchecked")
-                            List<String> castList = (List<String>) baseSection.get("depend");
-                            baseDepend = castList;
-                        }
-                    }
-
-                    // Navigate Nested Map for 'extension'
-                    if (data.get("extension") instanceof Map) {
-                        @SuppressWarnings("unchecked")
-                        Map<String, Object> extSection = (Map<String, Object>) data.get("extension");
-                        if (extSection.get("depend") instanceof List) {
-                            @SuppressWarnings("unchecked")
-                            List<String> castList = (List<String>) extSection.get("depend");
-                            extDepend = castList;
-                        }
-                    }
+                if (data == null) {
+                    return null;
                 }
+
+                String id = (String) data.get("name");
+                String mainClass = (String) data.get("main");
+                String version = String.valueOf(data.getOrDefault("version", "1.0.0"));
+                List<String> extDepend = extractStringList(data, "extension", "depend");
+                GitInfo gitInfo = extractGitInfo(data.get("git"));
+
+                return new ExtensionDescriptor(id, mainClass, version, extDepend, gitInfo, jarFile);
             }
-        }
-
-        if (id == null || mainClassName == null) return LoadResult.FAILED;
-
-        // 2. Check Base Plugin Dependencies
-        for (String dep : baseDepend) {
-            if (!Bukkit.getPluginManager().isPluginEnabled(dep)) {
-                plugin.getLogger().warning("Skipping " + id + ": Missing base plugin '" + dep + "'");
-                return LoadResult.FAILED;
-            }
-        }
-
-        // 3. Check Extension Dependencies
-        for (String dep : extDepend) {
-            if (!loadedInstances.containsKey(dep)) return LoadResult.WAITING;
-        }
-
-        // 4. Load Classes and Instantiate
-        URI uri = jarFile.toURI();
-        URL[] urls = {uri.toURL()};
-        try (URLClassLoader loader = new URLClassLoader(urls, plugin.getClass().getClassLoader())) {
-            Class<?> clazz = loader.loadClass(mainClassName);
-            
-            if (!IMCExtension.class.isAssignableFrom(clazz)) return LoadResult.FAILED;
-            if (loadedExtensionsInfo.containsKey(id)) return LoadResult.FAILED;
-
-            IMCExtension extension = (IMCExtension) clazz.getDeclaredConstructor().newInstance();
-
-            // 5. License Check (loads from plugins/{main jar}/extensions/libs/{extension name}/config.yml)
-            // Note: Keeping standard path structure, but inside extensions/libs as requested.
-            File extensionFolder = new File(plugin.getDataFolder(), "extensions/libs");
-            File extConfigPath = new File(extensionFolder, id + File.separator + "config.yml");
-            String licenseUrl = "";
-            String licenseToken = "";
-
-            if (extConfigPath.exists()) {
-                YamlConfiguration config = YamlConfiguration.loadConfiguration(extConfigPath);
-                licenseUrl = config.getString("license.url", "");
-                licenseToken = config.getString("license.token", "");
-            }
-
-            if (!extension.checkLicense(licenseUrl, licenseToken)) {
-                plugin.getLogger().severe("Extension " + id + " failed license verification! Skipping load.");
-                return LoadResult.FAILED;
-            }
-            
-            try {
-                extension.onLoad(plugin, executor);
-                loadedExtensionsInfo.put(id, version);
-                loadedInstances.put(id, extension);
-                plugin.getLogger().info("Loaded Extension: " + id + " (v" + version + ")");
-                return LoadResult.SUCCESS;
-            } catch (Exception e) {
-                e.printStackTrace();
-                return LoadResult.FAILED;
-            }
+        } catch (IOException e) {
+            return null;
         }
     }
 
-    /**
-     * Gets a map of all currently loaded extension IDs and their versions.
-     *
-     * @return An unmodifiable-style copy of the loaded extensions info map.
-     */
-    public Map<String, String> getLoadedExtensions() {
-        return new HashMap<>(loadedExtensionsInfo);
+    @SuppressWarnings("unchecked")
+    private List<String> extractStringList(Map<String, Object> root, String section, String key) {
+        if (root == null || !(root.get(section) instanceof Map<?, ?> sectionMap)) {
+            return Collections.emptyList();
+        }
+        Object raw = ((Map<String, Object>) sectionMap).get(key);
+        if (raw instanceof List<?> list) {
+            List<String> values = new ArrayList<>();
+            for (Object o : list) {
+                if (o != null) {
+                    values.add(String.valueOf(o));
+                }
+            }
+            return values;
+        }
+        return Collections.emptyList();
+    }
+
+    private GitInfo extractGitInfo(Object gitBlock) {
+        if (!(gitBlock instanceof Map<?, ?> map)) {
+            return null;
+        }
+        String provider = String.valueOf(map.getOrDefault("provider", "")).trim();
+        String owner = String.valueOf(map.getOrDefault("owner", "")).trim();
+        String repository = String.valueOf(map.getOrDefault("repository", "")).trim();
+        String token = String.valueOf(map.getOrDefault("token", "")).trim();
+        if (provider.isEmpty() || owner.isEmpty() || repository.isEmpty()) {
+            return null;
+        }
+        return new GitInfo(provider, owner, repository, token);
+    }
+
+    private boolean checkLicense(JavaPlugin plugin, String id, IMCExtension extension) {
+        File extensionFolder = new File(plugin.getDataFolder(), "extensions/libs");
+        File extConfigPath = new File(extensionFolder, id + File.separator + "config.yml");
+        if (!extConfigPath.exists()) {
+            return true;
+        }
+
+        YamlConfiguration config = YamlConfiguration.loadConfiguration(extConfigPath);
+        String licenseUrl = config.getString("license.url", "");
+        String licenseToken = config.getString("license.token", "");
+
+        if (!extension.checkLicense(licenseUrl, licenseToken)) {
+            plugin.getLogger().severe("Extension " + id + " failed license verification! Skipping load.");
+            return false;
+        }
+        return true;
+    }
+
+    private void closeClassLoader(String id) {
+        URLClassLoader loader = classLoaders.remove(id);
+        close(loader);
+    }
+
+    private void close(URLClassLoader loader) {
+        if (loader == null) {
+            return;
+        }
+        try {
+            loader.close();
+        } catch (IOException e) {
+            // keep logging concise and non-fatal
+        } finally {
+            System.gc();
+        }
+    }
+
+    private record ExtensionDescriptor(String id, String mainClass, String version, List<String> extensionDepends,
+                                       GitInfo gitInfo, File file) {
     }
 }
