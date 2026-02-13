@@ -295,7 +295,8 @@ public class MCExtensionManager {
         }
 
         File target = loaded.file();
-        disableExtension(plugin, plugin.getServer().getScheduler().getMainThreadExecutor(plugin), id);
+        Executor mainThread = command -> Bukkit.getScheduler().runTask(plugin, command);
+        disableExtension(plugin, mainThread, id);
 
         if (target.exists() && !target.delete()) {
             plugin.getLogger().severe("Could not delete old jar for " + id + "; aborting update.");
@@ -305,7 +306,7 @@ public class MCExtensionManager {
         try {
             Files.move(downloadedFile.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING);
             plugin.getLogger().info("Updated jar swapped for " + id + ". Reloading...");
-            loadExtension(plugin, plugin.getServer().getScheduler().getMainThreadExecutor(plugin), target);
+            loadExtension(plugin, mainThread, target);
         } catch (Exception e) {
             plugin.getLogger().severe("Failed to hot-swap extension " + id + ": " + e.getMessage());
         }
@@ -356,10 +357,12 @@ public class MCExtensionManager {
         return Collections.emptyList();
     }
 
+    @SuppressWarnings("unchecked")
     private GitInfo extractGitInfo(Object gitBlock) {
-        if (!(gitBlock instanceof Map<?, ?> map)) {
+        if (!(gitBlock instanceof Map<?, ?> raw)) {
             return null;
         }
+        Map<String, Object> map = (Map<String, Object>) raw;
         String provider = String.valueOf(map.getOrDefault("provider", "")).trim();
         String owner = String.valueOf(map.getOrDefault("owner", "")).trim();
         String repository = String.valueOf(map.getOrDefault("repository", "")).trim();
