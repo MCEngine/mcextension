@@ -10,7 +10,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
-import java.net.URL;
+import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -101,7 +101,7 @@ public final class MCExtensionGitLab {
     }
 
     private static HttpURLConnection open(String url, String token) throws IOException {
-        HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
+        HttpURLConnection conn = (HttpURLConnection) URI.create(url).toURL().openConnection();
         conn.setInstanceFollowRedirects(false);
         conn.setRequestProperty("User-Agent", "MCExtension-Updater");
         if (token != null && !token.isBlank()) {
