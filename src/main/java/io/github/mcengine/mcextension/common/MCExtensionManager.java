@@ -272,18 +272,33 @@ public class MCExtensionManager {
             return;
         }
 
-        File tempFile = new File(descriptor.file.getParentFile(), descriptor.file.getName() + ".update");
-        boolean downloaded = switch (git.provider.toLowerCase(Locale.ROOT)) {
-            case "github" -> MCExtensionGitHub.downloadUpdate(plugin, git.owner, git.repository, token, tempFile);
-            case "gitlab" -> MCExtensionGitLab.downloadUpdate(plugin, git.owner, git.repository, token, tempFile);
-            default -> false;
-        };
-
-        if (!downloaded) {
+        File parentDir = descriptor.file.getParentFile();
+        File oldFile = descriptor.file;
+        File backup = new File(parentDir, oldFile.getName() + ".bak");
+        if (oldFile.exists() && !oldFile.renameTo(backup)) {
+            plugin.getLogger().severe("Could not backup old jar for " + descriptor.id + "; aborting update.");
             return;
         }
 
-        Bukkit.getScheduler().runTask(plugin, () -> swapAndReload(plugin, descriptor.id, tempFile));
+        File downloaded = switch (git.provider.toLowerCase(Locale.ROOT)) {
+            case "github" -> MCExtensionGitHub.downloadUpdate(plugin, git.owner, git.repository, token, parentDir);
+            case "gitlab" -> MCExtensionGitLab.downloadUpdate(plugin, git.owner, git.repository, token, parentDir);
+            default -> null;
+        };
+
+        if (downloaded == null) {
+            if (backup.exists() && !oldFile.exists()) {
+                // restore original jar on failure
+                backup.renameTo(oldFile);
+            }
+            return;
+        }
+
+        if (backup.exists()) {
+            backup.delete();
+        }
+
+        Bukkit.getScheduler().runTask(plugin, () -> swapAndReload(plugin, descriptor.id, downloaded));
     }
 
     private void swapAndReload(JavaPlugin plugin, String id, File downloadedFile) {
@@ -293,17 +308,11 @@ public class MCExtensionManager {
             return;
         }
 
-        File target = loaded.file();
+        File target = downloadedFile;
         Executor mainThread = command -> Bukkit.getScheduler().runTask(plugin, command);
         disableExtension(plugin, mainThread, id);
 
-        if (target.exists() && !target.delete()) {
-            plugin.getLogger().severe("Could not delete old jar for " + id + "; aborting update.");
-            return;
-        }
-
         try {
-            Files.move(downloadedFile.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING);
             plugin.getLogger().info("Updated jar swapped for " + id + ". Reloading...");
             loadExtension(plugin, mainThread, target);
         } catch (Exception e) {

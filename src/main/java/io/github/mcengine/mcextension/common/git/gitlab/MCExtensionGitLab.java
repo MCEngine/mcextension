@@ -34,18 +34,18 @@ public final class MCExtensionGitLab {
         }
     }
 
-    public static boolean downloadUpdate(JavaPlugin plugin, String owner, String repository, String token, File destination) {
+    public static File downloadUpdate(JavaPlugin plugin, String owner, String repository, String token, File parentDir) {
         try {
             if (owner == null || owner.isBlank() || repository == null || repository.isBlank()) {
                 plugin.getLogger().warning("GitLab download skipped: owner/repository not configured for repo " + owner + "/" + repository);
-                return false;
+                return null;
             }
             String project = URLEncoder.encode(owner + "/" + repository, StandardCharsets.UTF_8);
             String apiUrl = "https://gitlab.com/api/v4/projects/" + project + "/releases";
             String body = fetchString(apiUrl, token);
             if (body == null) {
                 plugin.getLogger().warning("GitLab download skipped: no release response for " + owner + "/" + repository);
-                return false;
+                return null;
             }
             String assetUrl = findJarUrl(body, "direct_asset_url");
             if (assetUrl == null) {
@@ -61,16 +61,21 @@ public final class MCExtensionGitLab {
                     assetUrl = findAnyJarUrl(body);
                     if (assetUrl == null) {
                         plugin.getLogger().warning("No downloadable jar asset found for GitLab release " + owner + "/" + repository + "; tag=" + tag + ", asset=" + assetName);
-                        return false;
+                        return null;
                     } else {
                         plugin.getLogger().info("GitLab release asset fallback (any jar) resolved for " + owner + "/" + repository + " -> " + assetUrl);
                     }
                 }
             }
-            return downloadToFile(assetUrl, token, destination);
+            String assetFileName = fileNameFromUrl(assetUrl, repository + ".jar");
+            File destination = new File(parentDir, assetFileName);
+            if (downloadToFile(assetUrl, token, destination)) {
+                return destination;
+            }
+            return null;
         } catch (Exception e) {
             plugin.getLogger().warning("GitLab download failed for " + owner + "/" + repository + ": " + e.getMessage());
-            return false;
+            return null;
         }
     }
 
@@ -200,5 +205,21 @@ public final class MCExtensionGitLab {
             idx = lower.indexOf("http", idx + 1);
         }
         return null;
+    }
+
+    private static String fileNameFromUrl(String url, String defaultName) {
+        try {
+            String path = URI.create(url).getPath();
+            int slash = path.lastIndexOf('/');
+            if (slash >= 0 && slash + 1 < path.length()) {
+                String name = path.substring(slash + 1);
+                if (!name.isBlank()) {
+                    return name;
+                }
+            }
+            return defaultName;
+        } catch (Exception e) {
+            return defaultName;
+        }
     }
 }
