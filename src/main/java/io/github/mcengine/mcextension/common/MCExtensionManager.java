@@ -298,9 +298,10 @@ public class MCExtensionManager {
 
         File oldFile = loaded.file();
         File target = downloadedFile;
+        File backup = null;
         try {
             if (oldFile.exists() && !oldFile.equals(downloadedFile)) {
-                File backup = new File(oldFile.getParentFile(), oldFile.getName() + ".bak");
+                backup = new File(oldFile.getParentFile(), oldFile.getName() + ".bak");
                 try {
                     Files.move(oldFile.toPath(), backup.toPath(), StandardCopyOption.REPLACE_EXISTING);
                 } catch (IOException moveEx) {
@@ -318,6 +319,11 @@ public class MCExtensionManager {
         try {
             plugin.getLogger().info("Updated jar swapped for " + id + ". Reloading...");
             loadExtension(plugin, mainThread, target);
+            if (backup != null && backup.exists()) {
+                if (!backup.delete()) {
+                    plugin.getLogger().warning("Could not delete backup jar for " + id + " at " + backup.getName());
+                }
+            }
         } catch (Exception e) {
             plugin.getLogger().severe("Failed to hot-swap extension " + id + ": " + e.getMessage());
         }
