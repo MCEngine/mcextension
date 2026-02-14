@@ -24,11 +24,21 @@ repositories {
         name = 'sonatype'
         url = 'https://oss.sonatype.org/content/groups/public/'
     }
+    // GitHub Packages for MCUtil
+    maven {
+        url = uri("https://maven.pkg.github.com/MCEngine/mcutil")
+        credentials {
+            // Priority: Project Property -> Custom Env Var -> GitHub Default Env Var
+            username = project.findProperty('gpr.user') ?: System.getenv('USER_GITHUB_NAME') ?: System.getenv('GITHUB_ACTOR')
+            password = project.findProperty('gpr.key') ?: System.getenv('USER_GITHUB_TOKEN') ?: System.getenv('GITHUB_TOKEN')
+        }
+    }
 }
 
 dependencies {
     // Spigot API
     compileOnly 'org.spigotmc:spigot-api:1.21.11-R0.2-SNAPSHOT'
+    implementation 'io.github.mcengine:mcutil:2026.0.3-1'
 }
 
 def gitOwner = project.property('git-org-name')

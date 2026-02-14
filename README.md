@@ -160,12 +160,13 @@ Place this file in `src/main/resources` of your extension project to define its 
 name: "MyExtension"
 main: "io.github.mcengine.MyExtension"
 version: "1.0.0"
-base:
-  depend: [Vault] # Bukkit plugins required
-  softdepend: [Essentials]
 extension:
-  depend: [OtherExtID] # Other extensions required
-  softdepend: [exampleExt]
+  depend: [OtherExtID]     # optional: other extensions required
+git:
+  provider: github         # or gitlab
+  owner: my-org            # repo owner/group
+  repository: my-repo      # repo name
+  # token omitted: resolved from env (USER_GITHUB_TOKEN / USER_GITLAB_TOKEN) or host plugin config git.token
 ```
 
 ## 🔗 Resources
