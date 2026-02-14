@@ -319,13 +319,14 @@ public class MCExtensionManager {
         try {
             plugin.getLogger().info("Updated jar swapped for " + id + ". Reloading...");
             loadExtension(plugin, mainThread, target);
+        } catch (Exception e) {
+            plugin.getLogger().severe("Failed to hot-swap extension " + id + ": " + e.getMessage());
+        } finally {
             if (backup != null && backup.exists()) {
                 if (!backup.delete()) {
                     plugin.getLogger().warning("Could not delete backup jar for " + id + " at " + backup.getName());
                 }
             }
-        } catch (Exception e) {
-            plugin.getLogger().severe("Failed to hot-swap extension " + id + ": " + e.getMessage());
         }
     }
 
