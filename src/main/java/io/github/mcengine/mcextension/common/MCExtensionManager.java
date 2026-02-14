@@ -275,8 +275,22 @@ public class MCExtensionManager {
         File parentDir = descriptor.file.getParentFile();
         File oldFile = descriptor.file;
         File backup = new File(parentDir, oldFile.getName() + ".bak");
-        if (oldFile.exists() && !oldFile.renameTo(backup)) {
-            plugin.getLogger().severe("Could not backup old jar for " + descriptor.id + "; aborting update.");
+        try {
+            if (backup.exists() && !backup.delete()) {
+                plugin.getLogger().warning("Could not delete existing backup for " + descriptor.id + "; attempting overwrite.");
+            }
+            if (oldFile.exists()) {
+                try {
+                    Files.move(oldFile.toPath(), backup.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                } catch (IOException moveEx) {
+                    if (!oldFile.delete()) {
+                        plugin.getLogger().severe("Could not backup or delete old jar for " + descriptor.id + "; aborting update.");
+                        return;
+                    }
+                }
+            }
+        } catch (Exception ex) {
+            plugin.getLogger().severe("Failed preparing backup for " + descriptor.id + ": " + ex.getMessage());
             return;
         }
 
