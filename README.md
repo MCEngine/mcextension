@@ -12,17 +12,17 @@ To use MCExtension in your project, add the following to your `pom.xml`. Note th
 <dependency>
   <groupId>io.github.mcengine</groupId>
   <artifactId>mcextension</artifactId>
-  <version>{yyyy.{m}.{m} or {yyyy.{m}.{m}-{iteration}</version> 
+  <version>2026.0.3-4</version>
 </dependency>
 ```
 
 ## 🛠️ Key Components
 
-`IMCExtension` **(Interface)**
+### IMCExtension (Interface)
 
 The core interface defining the identity and lifecycle of an extension.
 
-**Methods:**
+#### Methods
 
 - `checkLicense(String url, String token)`: Optional method to verify the extension license. Automatically loads from `plugins/{main jar}/extensions/{ext name}/config.yml`. Returns `true` by default.
 
@@ -34,7 +34,7 @@ The core interface defining the identity and lifecycle of an extension.
 
 ## 🚀 Usage Examples
 
-**1. Creating an Extension**
+### 1. Creating an Extension
 
 Implement the `IMCExtension` interface in your extension project.
 
@@ -77,7 +77,7 @@ public class MyExtension implements IMCExtension {
 
 For extensions that require license verification, the `MCExtensionManager` automatically looks for a configuration file at: `plugins/{HostPlugin}/extensions/{ExtensionName}/config.yml`
 
-**Example `config.yml` structure:**
+#### Example `config.yml` structure
 
 ```yaml
 license:
@@ -85,7 +85,7 @@ license:
   token: "YOUR-LICENSE-KEY-HERE"
 ```
 
-**2. Managing Extensions**
+### 2. Managing Extensions
 
 Use the `MCExtensionManager` in your main plugin to handle the loading process.
 
@@ -166,9 +166,8 @@ git:
   provider: github         # or gitlab
   owner: my-org            # repo owner/group
   repository: my-repo      # repo name
-  # token omitted: resolved from env (USER_GITHUB_TOKEN / USER_GITLAB_TOKEN) or host plugin config git.token
+  # token resolution order:
+  #   1) env USER_GITHUB_TOKEN / USER_GITLAB_TOKEN
+  #   2) host plugin config git.<provider>.token (git.github.token / git.gitlab.token)
+  #   3) host plugin config git.token
 ```
-
-## 🔗 Resources
-
-- **Example Project:** [Example Extension](https://github.com/MCEngine/mcextension-example)
