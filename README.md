@@ -171,7 +171,3 @@ git:
   #   2) host plugin config git.<provider>.token (git.github.token / git.gitlab.token)
   #   3) host plugin config git.token
 ```
-
-## 🔗 Resources
-
-- **Example Project:** [Example Extension](https://github.com/MCEngine/mcextension-example)
