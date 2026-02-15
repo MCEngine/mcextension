@@ -167,9 +167,9 @@ git:
   owner: my-org            # repo owner/group
   repository: my-repo      # repo name
   # token resolution order:
-  #   1) host plugin config git.<provider>.token (git.github.token / git.gitlab.token)
-  #   2) host plugin config git.token
-  #   3) env USER_GITHUB_TOKEN / USER_GITLAB_TOKEN
+  #   1) env USER_GITHUB_TOKEN / USER_GITLAB_TOKEN
+  #   2) host plugin config git.<provider>.token (git.github.token / git.gitlab.token)
+  #   3) host plugin config git.token
 ```
 
 ## 🔗 Resources
