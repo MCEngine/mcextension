@@ -1,12 +1,13 @@
-# Example
-name: MyEpicExtension
-version: 1.0.0
-main: io.github.example.EpicExtension
-
-base:
-  depend: [Vault, PlaceholderAPI]
-  softdepend: [Essentials]
-
+name: "MyExtension"
+main: "io.github.mcengine.MyExtension"
+version: "1.0.0"
 extension:
-  depend: [CoreExtension]
-  softdepend: [OptionalModule]
+  depend: [OtherExtID]
+git:
+  provider: github
+  owner: my-org
+  repository: my-repo
+  # token resolution order:
+  #   1) env USER_GITHUB_TOKEN / USER_GITLAB_TOKEN
+  #   2) host plugin config git.<provider>.token (git.github.token / git.gitlab.token)
+  #   3) host plugin config git.token
