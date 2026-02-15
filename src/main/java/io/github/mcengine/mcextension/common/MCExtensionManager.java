@@ -391,21 +391,31 @@ public class MCExtensionManager {
     }
 
     private String resolveToken(JavaPlugin plugin, String provider) {
-        String envToken = switch (provider.toLowerCase(Locale.ROOT)) {
+        String normalizedProvider = provider == null ? "" : provider.trim().toLowerCase(Locale.ROOT);
+        if (plugin.getConfig() != null) {
+            String providerKey = switch (normalizedProvider) {
+                case "github" -> "git.github.token";
+                case "gitlab" -> "git.gitlab.token";
+                default -> null;
+            };
+            if (providerKey != null) {
+                String providerToken = plugin.getConfig().getString(providerKey, null);
+                if (providerToken != null && !providerToken.isBlank()) {
+                    return providerToken;
+                }
+            }
+
+            String generic = plugin.getConfig().getString("git.token", null);
+            if (generic != null && !generic.isBlank()) {
+                return generic;
+            }
+        }
+
+        return switch (normalizedProvider) {
             case "github" -> System.getenv("USER_GITHUB_TOKEN");
             case "gitlab" -> System.getenv("USER_GITLAB_TOKEN");
             default -> null;
         };
-        if (envToken != null && !envToken.isBlank()) {
-            return envToken;
-        }
-        if (plugin.getConfig() != null) {
-            String cfg = plugin.getConfig().getString("git.token", null);
-            if (cfg != null && !cfg.isBlank()) {
-                return cfg;
-            }
-        }
-        return null;
     }
 
     private boolean checkLicense(JavaPlugin plugin, String id, IMCExtension extension) {

@@ -166,7 +166,10 @@ git:
   provider: github         # or gitlab
   owner: my-org            # repo owner/group
   repository: my-repo      # repo name
-  # token omitted: resolved from env (USER_GITHUB_TOKEN / USER_GITLAB_TOKEN) or host plugin config git.token
+  # token resolution order:
+  #   1) host plugin config git.<provider>.token (git.github.token / git.gitlab.token)
+  #   2) host plugin config git.token
+  #   3) env USER_GITHUB_TOKEN / USER_GITLAB_TOKEN
 ```
 
 ## 🔗 Resources
