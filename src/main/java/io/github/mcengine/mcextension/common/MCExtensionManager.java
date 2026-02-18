@@ -239,7 +239,8 @@ public class MCExtensionManager {
     }
 
     private void triggerAsyncUpdateCheck(JavaPlugin plugin, Executor executor, ExtensionDescriptor descriptor) {
-        if (descriptor.gitInfo == null) {
+        boolean updatesEnabled = plugin.getConfig() != null && plugin.getConfig().getBoolean("extension.update", false);
+        if (!updatesEnabled || descriptor.gitInfo == null) {
             return;
         }
         try {
