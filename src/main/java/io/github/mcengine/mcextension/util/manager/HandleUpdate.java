@@ -14,9 +14,21 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.Executor;
 
+/**
+ * Handles update checks and download/replace flow for an extension.
+ */
 public final class HandleUpdate {
     private HandleUpdate() {}
 
+    /**
+     * Checks for updates via git provider, downloads latest jar when available, and schedules hot swap.
+     *
+     * @param plugin           host plugin for logging/scheduling
+     * @param descriptor       extension descriptor
+     * @param manager          owning manager
+     * @param loadedExtensions map of loaded extensions
+     * @param classLoaders     map of classloaders
+     */
     public static void invoke(JavaPlugin plugin, MCExtensionManager.ExtensionDescriptor descriptor,
                               MCExtensionManager manager,
                               Map<String, MCExtensionManager.LoadedExtension> loadedExtensions,
@@ -54,6 +66,9 @@ public final class HandleUpdate {
         org.bukkit.Bukkit.getScheduler().runTask(plugin, () -> swapAndReload(plugin, descriptor.id(), downloaded, loadedExtensions, classLoaders, manager));
     }
 
+    /**
+     * Swaps the downloaded jar into place and reloads the extension on the main thread.
+     */
     private static void swapAndReload(JavaPlugin plugin, String id, File downloadedFile,
                                       Map<String, MCExtensionManager.LoadedExtension> loadedExtensions,
                                       Map<String, URLClassLoader> classLoaders,

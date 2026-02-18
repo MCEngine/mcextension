@@ -17,9 +17,23 @@ import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import org.yaml.snakeyaml.Yaml;
 
+/**
+ * Loads an extension jar, validates dependencies/license, and registers it with the manager.
+ */
 public final class LoadExtension {
     private LoadExtension() {}
 
+    /**
+     * Loads the given jar, instantiates its {@code IMCExtension}, registers loaders, and triggers update check.
+     *
+     * @param plugin          host plugin used for logging and config
+     * @param executor        executor for extension tasks
+     * @param jarFile         extension jar
+     * @param loadedExtensions registry of loaded extensions
+     * @param classLoaders    registry of classloaders
+     * @param manager         owning manager
+     * @return load result indicating success/failure/waiting for deps
+     */
     public static LoadResult invoke(JavaPlugin plugin, Executor executor, File jarFile,
                                     Map<String, MCExtensionManager.LoadedExtension> loadedExtensions,
                                     Map<String, URLClassLoader> classLoaders,
@@ -71,6 +85,12 @@ public final class LoadExtension {
         }
     }
 
+    /**
+     * Reads extension.yml from the jar to build an {@link MCExtensionManager.ExtensionDescriptor}.
+     *
+     * @param jarFile extension jar
+     * @return descriptor or null when missing/invalid
+     */
     private static MCExtensionManager.ExtensionDescriptor readDescriptor(File jarFile) {
         try (JarFile jar = new JarFile(jarFile)) {
             JarEntry entry = jar.getJarEntry("extension.yml");

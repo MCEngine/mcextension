@@ -4,9 +4,18 @@ import io.github.mcengine.mcextension.common.MCExtensionManager;
 
 import java.util.Map;
 
+/**
+ * Extracts Git provider metadata from a raw map (parsed extension.yml).
+ */
 public final class ExtractGitInfo {
     private ExtractGitInfo() {}
 
+    /**
+     * Reads provider/owner/repository from the git block.
+     *
+     * @param gitBlock raw git map from YAML
+     * @return GitInfo when fields are present; otherwise null
+     */
     @SuppressWarnings("unchecked")
     public static MCExtensionManager.GitInfo invoke(Object gitBlock) {
         if (!(gitBlock instanceof Map<?, ?> raw)) {

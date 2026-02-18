@@ -5,9 +5,20 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Utility for safely extracting string lists from nested YAML maps.
+ */
 public final class ExtractStringList {
     private ExtractStringList() {}
 
+    /**
+     * Gets a list under <code>root[section][key]</code> as strings.
+     *
+     * @param root    root map
+     * @param section section key containing the list
+     * @param key     list key
+     * @return list of stringified values or empty list when absent
+     */
     @SuppressWarnings("unchecked")
     public static List<String> invoke(Map<String, Object> root, String section, String key) {
         if (root == null || !(root.get(section) instanceof Map<?, ?> sectionMap)) {

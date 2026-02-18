@@ -7,9 +7,19 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 
+/**
+ * Applies pending extension update artifacts by renaming/moving staged files into their final jar names.
+ */
 public final class FinalizePendingUpdates {
     private FinalizePendingUpdates() {}
 
+    /**
+     * Moves any <code>.update</code> or <code>.jar.tmp</code> files in the extension folder into their final
+     * jar filenames, logging outcomes on the provided plugin logger.
+     *
+     * @param plugin          host plugin used for logging
+     * @param extensionFolder directory containing extension artifacts
+     */
     public static void invoke(JavaPlugin plugin, File extensionFolder) {
         File[] pending = extensionFolder.listFiles((dir, name) -> name.endsWith(".update") || name.endsWith(".jar.tmp"));
         if (pending == null || pending.length == 0) {

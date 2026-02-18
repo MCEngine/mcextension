@@ -15,10 +15,23 @@ import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.util.Locale;
 
+/**
+ * GitHub utility for checking and downloading extension updates.
+ */
 public final class MCExtensionGitHub {
 
     private MCExtensionGitHub() {}
 
+    /**
+     * Compares current extension version against the latest GitHub release.
+     *
+     * @param plugin          host plugin for logging
+     * @param owner           repository owner/org
+     * @param repository      repository name
+     * @param currentVersion  current extension version
+     * @param token           optional auth token for private repos
+     * @return true if newer version is available; false otherwise
+     */
     public static boolean checkUpdate(JavaPlugin plugin, String owner, String repository, String currentVersion, String token) {
         try {
             if (owner == null || owner.isBlank() || repository == null || repository.isBlank()) {
@@ -32,6 +45,16 @@ public final class MCExtensionGitHub {
         }
     }
 
+    /**
+     * Downloads the latest release asset (jar) for the repository.
+     *
+     * @param plugin     host plugin for logging
+     * @param owner      repository owner/org
+     * @param repository repository name
+     * @param token      optional auth token for private repos
+     * @param parentDir  destination directory to place the jar
+     * @return downloaded file or null when unavailable
+     */
     public static File downloadUpdate(JavaPlugin plugin, String owner, String repository, String token, File parentDir) {
         try {
             if (owner == null || owner.isBlank() || repository == null || repository.isBlank()) {
@@ -73,6 +96,13 @@ public final class MCExtensionGitHub {
         }
     }
 
+    /**
+     * Fetches string content from a URL with optional bearer token, following one redirect manually.
+     *
+     * @param url   target URL
+     * @param token optional bearer token
+     * @return response body as string
+     */
     private static String fetchString(String url, String token) throws IOException {
         HttpURLConnection conn = open(url, token);
         if (conn.getResponseCode() >= 300 && conn.getResponseCode() < 400) {
@@ -91,6 +121,14 @@ public final class MCExtensionGitHub {
         }
     }
 
+    /**
+     * Downloads from URL to destination (via temp file) with optional bearer token.
+     *
+     * @param url         source URL
+     * @param token       optional bearer token
+     * @param destination destination file path
+     * @return true when download succeeds
+     */
     private static boolean downloadToFile(String url, String token, File destination) throws IOException {
         HttpURLConnection conn = open(url, token);
         if (conn.getResponseCode() >= 300 && conn.getResponseCode() < 400) {
@@ -111,6 +149,13 @@ public final class MCExtensionGitHub {
         return true;
     }
 
+    /**
+     * Opens an HTTP connection with standard headers and optional bearer token.
+     *
+     * @param url   target URL
+     * @param token optional bearer token
+     * @return configured connection
+     */
     private static HttpURLConnection open(String url, String token) throws IOException {
         HttpURLConnection conn = (HttpURLConnection) URI.create(url).toURL().openConnection();
         conn.setInstanceFollowRedirects(false);
@@ -121,6 +166,13 @@ public final class MCExtensionGitHub {
         return conn;
     }
 
+    /**
+     * Finds a jar URL by searching for a key and ensuring the value ends with .jar.
+     *
+     * @param body response body to scan
+     * @param key  JSON key to search for
+     * @return jar URL or null when not found
+     */
     private static String findJarUrl(String body, String key) {
         String lower = body.toLowerCase(Locale.ROOT);
         String search = key.toLowerCase(Locale.ROOT);
@@ -139,6 +191,13 @@ public final class MCExtensionGitHub {
         return null;
     }
 
+    /**
+     * Derives a filename from URL path, falling back to default when missing.
+     *
+     * @param url         the URL to derive the filename from
+     * @param defaultName the default filename to use if none is found
+     * @return derived filename
+     */
     private static String fileNameFromUrl(String url, String defaultName) {
         try {
             String path = URI.create(url).getPath();
@@ -155,6 +214,12 @@ public final class MCExtensionGitHub {
         }
     }
 
+    /**
+     * Scans the body for any URL ending with .jar.
+     *
+     * @param body response body to scan
+     * @return jar URL or null when not found
+     */
     private static String findAnyJarUrl(String body) {
         String lower = body.toLowerCase(Locale.ROOT);
         int idx = lower.indexOf("http");
@@ -175,6 +240,13 @@ public final class MCExtensionGitHub {
         return null;
     }
 
+    /**
+     * Extracts a simple quoted string value by key name.
+     *
+     * @param body response body to scan
+     * @param key  key to search for
+     * @return value string or null when missing
+     */
     private static String findSimpleValue(String body, String key) {
         String lower = body.toLowerCase(Locale.ROOT);
         String search = '"' + key.toLowerCase(Locale.ROOT) + '"';
@@ -193,6 +265,12 @@ public final class MCExtensionGitHub {
         return body.substring(start + 1, end);
     }
 
+    /**
+     * Attempts to find a jar asset name within a GitHub release assets block.
+     *
+     * @param body release JSON body
+     * @return asset name ending with .jar or null
+     */
     private static String findAssetName(String body) {
         String lower = body.toLowerCase(Locale.ROOT);
         int assetsIdx = lower.indexOf("\"assets\"");
