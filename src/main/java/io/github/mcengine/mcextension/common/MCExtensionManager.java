@@ -201,6 +201,28 @@ public class MCExtensionManager {
     }
 
     /**
+     * Disables and reloads a specific extension by id.
+     *
+     * @param plugin   host plugin
+     * @param executor executor for extension lifecycle callbacks
+     * @param id       extension id
+     * @return true if reload succeeded, false otherwise
+     */
+    public boolean reloadExtension(JavaPlugin plugin, Executor executor, String id) {
+        return ReloadExtension.invoke(plugin, executor, id, loadedExtensions, classLoaders, this);
+    }
+
+    /**
+     * Disables all extensions and then reloads every extension from disk.
+     *
+     * @param plugin   host plugin
+     * @param executor executor for extension lifecycle callbacks
+     */
+    public void reloadAllExtensions(JavaPlugin plugin, Executor executor) {
+        ReloadAllExtensions.invoke(plugin, executor, loadedExtensions, classLoaders, this);
+    }
+
+    /**
      * Closes and removes the classloader associated with an extension id.
      *
      * @param id extension id
