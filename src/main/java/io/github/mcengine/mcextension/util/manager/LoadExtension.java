@@ -7,6 +7,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.io.InputStream;
@@ -58,13 +59,25 @@ public final class LoadExtension {
         URLClassLoader loader = new URLClassLoader(urls, plugin.getClass().getClassLoader());
         try {
             Class<?> clazz = loader.loadClass(descriptor.mainClass());
-            if (!IMCExtension.class.isAssignableFrom(clazz)) {
-                plugin.getLogger().severe("Main class does not implement IMCExtension: " + descriptor.mainClass());
+            Object rawInstance = clazz.getDeclaredConstructor().newInstance();
+
+            IMCExtension extension;
+            if (IMCExtension.class.isAssignableFrom(clazz)) {
+                extension = (IMCExtension) rawInstance;
+            } else {
+                extension = adaptRelocatedIMCExtension(rawInstance, plugin);
+                if (extension == null) {
+                    plugin.getLogger().severe("Main class does not implement IMCExtension (even relocated): " + descriptor.mainClass());
+                    Close.invoke(loader);
+                    return LoadResult.FAILED;
+                }
+            }
+
+            if (extension == null) {
+                plugin.getLogger().severe("Failed to create IMCExtension instance: " + descriptor.mainClass());
                 Close.invoke(loader);
                 return LoadResult.FAILED;
             }
-
-            IMCExtension extension = (IMCExtension) clazz.getDeclaredConstructor().newInstance();
 
             if (!CheckLicense.invoke(plugin, descriptor.id(), extension)) {
                 Close.invoke(loader);
@@ -83,6 +96,119 @@ public final class LoadExtension {
             Close.invoke(loader);
             return LoadResult.FAILED;
         }
+    }
+
+    /**
+     * Allows extensions that shaded/relocated the IMCExtension interface to be adapted via reflection.
+     * This checks for compatible method signatures and wraps the instance to our IMCExtension contract.
+     *
+     * @param instance raw extension instance
+     * @param plugin   host plugin for logging
+     * @return adapter implementing IMCExtension, or null when the contract is not compatible
+     */
+    private static IMCExtension adaptRelocatedIMCExtension(Object instance, JavaPlugin plugin) {
+        Class<?> clazz = instance.getClass();
+
+        Method onLoad = findCompatibleMethod(clazz, "onLoad", JavaPlugin.class, Executor.class);
+        Method onDisable = findCompatibleMethod(clazz, "onDisable", JavaPlugin.class, Executor.class);
+        Method checkUpdate = findCompatibleBooleanMethod(clazz, "checkUpdate", String.class, String.class);
+        Method checkLicense = findCompatibleBooleanMethod(clazz, "checkLicense", String.class, String.class);
+
+        if (onLoad == null && onDisable == null) {
+            return null;
+        }
+
+        plugin.getLogger().info("Adapting relocated IMCExtension for class: " + clazz.getName());
+
+        return new IMCExtension() {
+            @Override
+            public void onLoad(JavaPlugin plugin, Executor executor) {
+                if (onLoad != null) {
+                    try {
+                        onLoad.invoke(instance, plugin, executor);
+                    } catch (Exception e) {
+                        plugin.getLogger().severe("Failed to invoke relocated onLoad: " + e.getMessage());
+                    }
+                }
+            }
+
+            @Override
+            public void onDisable(JavaPlugin plugin, Executor executor) {
+                if (onDisable != null) {
+                    try {
+                        onDisable.invoke(instance, plugin, executor);
+                    } catch (Exception e) {
+                        plugin.getLogger().severe("Failed to invoke relocated onDisable: " + e.getMessage());
+                    }
+                }
+            }
+
+            @Override
+            public boolean checkUpdate(String url, String token) {
+                if (checkUpdate != null) {
+                    try {
+                        Object result = checkUpdate.invoke(instance, url, token);
+                        if (result instanceof Boolean bool) {
+                            return bool;
+                        }
+                    } catch (Exception e) {
+                        plugin.getLogger().severe("Failed to invoke relocated checkUpdate: " + e.getMessage());
+                    }
+                }
+                return IMCExtension.super.checkUpdate(url, token);
+            }
+
+            @Override
+            public boolean checkLicense(String url, String token) {
+                if (checkLicense != null) {
+                    try {
+                        Object result = checkLicense.invoke(instance, url, token);
+                        if (result instanceof Boolean bool) {
+                            return bool;
+                        }
+                    } catch (Exception e) {
+                        plugin.getLogger().severe("Failed to invoke relocated checkLicense: " + e.getMessage());
+                    }
+                }
+                return IMCExtension.super.checkLicense(url, token);
+            }
+        };
+    }
+
+    private static Method findCompatibleMethod(Class<?> clazz, String name, Class<?>... expectedParams) {
+        for (Method method : clazz.getMethods()) {
+            if (!method.getName().equals(name)) {
+                continue;
+            }
+            Class<?>[] params = method.getParameterTypes();
+            if (params.length != expectedParams.length) {
+                continue;
+            }
+            boolean matches = true;
+            for (int i = 0; i < params.length; i++) {
+                if (!expectedParams[i].isAssignableFrom(params[i])) {
+                    matches = false;
+                    break;
+                }
+            }
+            if (matches) {
+                method.setAccessible(true);
+                return method;
+            }
+        }
+        return null;
+    }
+
+    private static Method findCompatibleBooleanMethod(Class<?> clazz, String name, Class<?>... expectedParams) {
+        Method method = findCompatibleMethod(clazz, name, expectedParams);
+        if (method == null) {
+            return null;
+        }
+        Class<?> returnType = method.getReturnType();
+        if (returnType.equals(boolean.class) || returnType.equals(Boolean.class)) {
+            return method;
+        }
+        return null;
     }
 
     /**
