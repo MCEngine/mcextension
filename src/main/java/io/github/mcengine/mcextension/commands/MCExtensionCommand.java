@@ -5,12 +5,8 @@ import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
-import org.bukkit.command.TabCompleter;
 import org.bukkit.plugin.java.JavaPlugin;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
 
@@ -18,7 +14,7 @@ import java.util.concurrent.Executor;
  * Shared command executor/tab-completer for managing extensions at runtime.
  * Provides basic subcommands: list, reload <id>, reloadall.
  */
-public class MCExtensionCommand implements CommandExecutor, TabCompleter {
+public class MCExtensionCommand implements CommandExecutor {
 
     private final JavaPlugin plugin;
     private final MCExtensionManager manager;
@@ -47,6 +43,7 @@ public class MCExtensionCommand implements CommandExecutor, TabCompleter {
             case "list" -> handleList(sender);
             case "reload" -> handleReload(sender, args);
             case "reloadall" -> handleReloadAll(sender);
+            case "disable" -> handleDisable(sender, args);
             default -> sendUsage(sender, label);
         }
         return true;
@@ -64,7 +61,7 @@ public class MCExtensionCommand implements CommandExecutor, TabCompleter {
 
     private void handleReload(CommandSender sender, String[] args) {
         if (args.length < 2) {
-            sender.sendMessage(ChatColor.YELLOW + "Usage: /" + sender.getName() + " reload <id>");
+            sender.sendMessage(ChatColor.YELLOW + "Usage: /" + "reload <id>");
             return;
         }
         String id = args[1];
@@ -81,41 +78,36 @@ public class MCExtensionCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(ChatColor.GREEN + "Reloaded all extensions.");
     }
 
+    private void handleDisable(CommandSender sender, String[] args) {
+        if (args.length < 2) {
+            sender.sendMessage(ChatColor.YELLOW + "Usage: /" + "disable <id>");
+            sendAvailableIds(sender);
+            return;
+        }
+        String id = args[1];
+        boolean success = manager.disableExtension(plugin, executor, id);
+        if (success) {
+            sender.sendMessage(ChatColor.GREEN + "Disabled extension: " + id);
+        } else {
+            sender.sendMessage(ChatColor.RED + "Extension not found or failed to disable: " + id);
+            sendAvailableIds(sender);
+        }
+    }
+
     private void sendUsage(CommandSender sender, String label) {
         sender.sendMessage(ChatColor.YELLOW + "Usage:");
         sender.sendMessage(ChatColor.AQUA + "/" + label + " list" + ChatColor.GRAY + " - Show loaded extensions");
         sender.sendMessage(ChatColor.AQUA + "/" + label + " reload <id>" + ChatColor.GRAY + " - Reload a specific extension");
         sender.sendMessage(ChatColor.AQUA + "/" + label + " reloadall" + ChatColor.GRAY + " - Reload all extensions");
+        sender.sendMessage(ChatColor.AQUA + "/" + label + " disable <id>" + ChatColor.GRAY + " - Disable a specific extension");
     }
 
-    @Override
-    public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
-        if (!sender.hasPermission("mcextension.admin")) {
-            return Collections.emptyList();
+    private void sendAvailableIds(CommandSender sender) {
+        Map<String, String> loaded = manager.getLoadedExtensions();
+        if (loaded.isEmpty()) {
+            sender.sendMessage(ChatColor.YELLOW + "No extensions loaded.");
+            return;
         }
-
-        if (args.length == 1) {
-            List<String> subs = List.of("list", "reload", "reloadall");
-            return filterPrefix(subs, args[0]);
-        }
-
-        if (args.length == 2 && args[0].equalsIgnoreCase("reload")) {
-            return filterPrefix(new ArrayList<>(manager.getLoadedExtensions().keySet()), args[1]);
-        }
-
-        return Collections.emptyList();
-    }
-
-    private List<String> filterPrefix(List<String> options, String prefix) {
-        if (prefix == null || prefix.isEmpty()) {
-            return options;
-        }
-        List<String> matches = new ArrayList<>();
-        for (String opt : options) {
-            if (opt.toLowerCase().startsWith(prefix.toLowerCase())) {
-                matches.add(opt);
-            }
-        }
-        return matches;
+        sender.sendMessage(ChatColor.YELLOW + "Available IDs: " + String.join(", ", loaded.keySet()));
     }
 }
