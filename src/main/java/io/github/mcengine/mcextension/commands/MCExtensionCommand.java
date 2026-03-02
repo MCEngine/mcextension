@@ -81,7 +81,6 @@ public class MCExtensionCommand implements CommandExecutor {
     private void handleDisable(CommandSender sender, String[] args) {
         if (args.length < 2) {
             sender.sendMessage(ChatColor.YELLOW + "Usage: /" + "disable <id>");
-            sendAvailableIds(sender);
             return;
         }
         String id = args[1];
@@ -90,7 +89,6 @@ public class MCExtensionCommand implements CommandExecutor {
             sender.sendMessage(ChatColor.GREEN + "Disabled extension: " + id);
         } else {
             sender.sendMessage(ChatColor.RED + "Extension not found or failed to disable: " + id);
-            sendAvailableIds(sender);
         }
     }
 
@@ -100,14 +98,5 @@ public class MCExtensionCommand implements CommandExecutor {
         sender.sendMessage(ChatColor.AQUA + "/" + label + " reload <id>" + ChatColor.GRAY + " - Reload a specific extension");
         sender.sendMessage(ChatColor.AQUA + "/" + label + " reloadall" + ChatColor.GRAY + " - Reload all extensions");
         sender.sendMessage(ChatColor.AQUA + "/" + label + " disable <id>" + ChatColor.GRAY + " - Disable a specific extension");
-    }
-
-    private void sendAvailableIds(CommandSender sender) {
-        Map<String, String> loaded = manager.getLoadedExtensions();
-        if (loaded.isEmpty()) {
-            sender.sendMessage(ChatColor.YELLOW + "No extensions loaded.");
-            return;
-        }
-        sender.sendMessage(ChatColor.YELLOW + "Available IDs: " + String.join(", ", loaded.keySet()));
     }
 }
