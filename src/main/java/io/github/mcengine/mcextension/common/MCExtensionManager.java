@@ -21,8 +21,12 @@ public class MCExtensionManager {
 
     private final Map<String, LoadedExtension> loadedExtensions = new HashMap<>();
     private final Map<String, URLClassLoader> classLoaders = new HashMap<>();
+    
+    // Limitation for the maximum number of extensions allowed
+    private final int maxExtensions;
 
-    public MCExtensionManager() {
+    public MCExtensionManager(int maxExtensions) {
+        this.maxExtensions = maxExtensions;
     }
 
     /**
@@ -53,10 +57,22 @@ public class MCExtensionManager {
         plugin.getLogger().info("Found " + files.length + " extension(s). Resolving dependencies...");
 
         while (changed && !pendingFiles.isEmpty()) {
+            // Check limit before processing the current batch
+            if (this.maxExtensions != -1 && loadedExtensions.size() >= this.maxExtensions) {
+                plugin.getLogger().warning("Maximum extension limit (" + this.maxExtensions + ") reached. Stopping further loading.");
+                break;
+            }
+
             changed = false;
             Iterator<File> iterator = pendingFiles.iterator();
 
             while (iterator.hasNext()) {
+                // Additional check inside the loop to ensure we don't exceed the limit mid-batch
+                if (this.maxExtensions != -1 && loadedExtensions.size() >= this.maxExtensions) {
+                    plugin.getLogger().warning("Maximum extension limit (" + this.maxExtensions + ") reached. Stopping further loading.");
+                    break;
+                }
+
                 File file = iterator.next();
                 try {
                     LoadResult result = loadExtension(plugin, executor, file);
@@ -76,7 +92,11 @@ public class MCExtensionManager {
 
         if (!pendingFiles.isEmpty()) {
             for (File file : pendingFiles) {
-                plugin.getLogger().severe("Could not load " + file.getName() + ": extension dependencies not met.");
+                if (this.maxExtensions != -1 && loadedExtensions.size() >= this.maxExtensions) {
+                    plugin.getLogger().warning("Skipped " + file.getName() + " due to maximum extension limit.");
+                } else {
+                    plugin.getLogger().severe("Could not load " + file.getName() + ": extension dependencies not met.");
+                }
             }
         }
     }
@@ -154,10 +174,10 @@ public class MCExtensionManager {
         public final String repository;
 
         /**
-          * @param provider git provider id (e.g., github/gitlab)
-          * @param owner    repository owner/org
-          * @param repository repository name
-          */
+         * @param provider git provider id (e.g., github/gitlab)
+         * @param owner    repository owner/org
+         * @param repository repository name
+         */
         public GitInfo(String provider, String owner, String repository) {
             this.provider = provider;
             this.owner = owner;
@@ -197,6 +217,11 @@ public class MCExtensionManager {
      * @throws ReflectiveOperationException when main class instantiation fails
      */
     public LoadResult loadExtension(JavaPlugin plugin, Executor executor, File jarFile) throws IOException, ReflectiveOperationException {
+        // Enforce the max extensions limit here as well to protect manual loading
+        if (this.maxExtensions != -1 && loadedExtensions.size() >= this.maxExtensions) {
+            plugin.getLogger().warning("Cannot load " + jarFile.getName() + ": maximum extension limit (" + this.maxExtensions + ") has been reached.");
+            return LoadResult.FAILED;
+        }
         return LoadExtension.invoke(plugin, executor, jarFile, loadedExtensions, classLoaders, this);
     }
 
@@ -242,6 +267,6 @@ public class MCExtensionManager {
      * @param file             source jar
      */
     public static record ExtensionDescriptor(String id, String mainClass, String version, List<String> extensionDepends,
-                                       GitInfo gitInfo, File file) {
+                                             GitInfo gitInfo, File file) {
     }
 }
