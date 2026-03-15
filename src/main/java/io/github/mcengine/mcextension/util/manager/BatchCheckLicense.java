@@ -4,6 +4,7 @@ import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
@@ -14,10 +15,10 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 public final class BatchCheckLicense {
@@ -30,7 +31,7 @@ public final class BatchCheckLicense {
      * @return A map of extension IDs to their license validation status (true = valid, false = invalid)
      */
     public static Map<String, Boolean> invokeAsync(JavaPlugin plugin, List<MCExtensionManager.ExtensionDescriptor> pendingExtensions) {
-        Map<String, Boolean> results = new HashMap<>();
+        Map<String, Boolean> results = new ConcurrentHashMap<>();
         Map<String, List<LicenseData>> groupedByUrl = new HashMap<>();
         File extensionFolder = new File(plugin.getDataFolder(), "extensions/libs");
 
@@ -89,9 +90,10 @@ public final class BatchCheckLicense {
                         boolean parsed = false;
                         try {
                             JsonObject payload = JsonParser.parseString(response.body()).getAsJsonObject();
-                            for (Map.Entry<String, ?> entry : payload.entrySet()) {
-                                if (entry.getValue() instanceof Boolean bool) {
-                                    results.put(entry.getKey(), bool);
+                            for (Map.Entry<String, JsonElement> entry : payload.entrySet()) {
+                                JsonElement element = entry.getValue();
+                                if (element.isJsonPrimitive() && element.getAsJsonPrimitive().isBoolean()) {
+                                    results.put(entry.getKey(), element.getAsBoolean());
                                 }
                             }
                             parsed = true;
