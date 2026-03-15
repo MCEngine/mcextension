@@ -1,5 +1,6 @@
 package io.github.mcengine.mcextension.util.manager;
 
+import io.github.mcengine.mcextension.common.MCExtensionManager;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -15,13 +16,25 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
+/**
+ * Utility that gathers license metadata from all pending extensions and executes batch
+ * license verification calls distributed by target endpoint.
+ * <p>
+ * A {@link ConcurrentHashMap} is used for the shared result registry so asynchronous
+ * HTTP completions can safely update validation outcomes without race conditions.
+ * </p>
+ */
 public final class BatchCheckLicense {
+    /**
+     * Static utility class meant to prevent instantiation.
+     */
     private BatchCheckLicense() {}
 
     /**
@@ -31,8 +44,11 @@ public final class BatchCheckLicense {
      * @return A map of extension IDs to their license validation status (true = valid, false = invalid)
      */
     public static Map<String, Boolean> invokeAsync(JavaPlugin plugin, List<MCExtensionManager.ExtensionDescriptor> pendingExtensions) {
+        /** Holds the aggregated license results keyed by extension ID. */
         Map<String, Boolean> results = new ConcurrentHashMap<>();
+        /** Groups extensions that share the same license verification endpoint. */
         Map<String, List<LicenseData>> groupedByUrl = new HashMap<>();
+        /** Base folder where extension-specific config files are stored. */
         File extensionFolder = new File(plugin.getDataFolder(), "extensions/libs");
 
         for (MCExtensionManager.ExtensionDescriptor descriptor : pendingExtensions) {
@@ -67,6 +83,15 @@ public final class BatchCheckLicense {
         return results;
     }
 
+    /**
+     * Builds and dispatches an asynchronous HTTP request for a specific license URL batch.
+     * @param plugin Logger target for warning messages
+     * @param client Shared HTTP client instance
+     * @param url License server URL for this batch
+     * @param batch License payload grouped by URL
+     * @param results Shared result map to record validation states
+     * @return future that completes when this batch response has been processed
+     */
     private static CompletableFuture<Void> buildRequest(JavaPlugin plugin, HttpClient client, String url, List<LicenseData> batch, Map<String, Boolean> results) {
         JsonArray jsonArray = new JsonArray();
         for (LicenseData data : batch) {

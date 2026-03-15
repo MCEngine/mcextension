@@ -7,6 +7,9 @@ import java.util.Map;
  * Removes and closes a classloader associated with an extension id.
  */
 public final class CloseClassLoader {
+    /**
+     * Static utility class meant to prevent instantiation.
+     */
     private CloseClassLoader() {}
 
     /**

@@ -18,6 +18,9 @@ import java.util.concurrent.Executor;
  * Handles update checks and download/replace flow for an extension.
  */
 public final class HandleUpdate {
+    /**
+     * Static utility class meant to prevent instantiation.
+     */
     private HandleUpdate() {}
 
     /**
@@ -68,6 +71,13 @@ public final class HandleUpdate {
 
     /**
      * Swaps the downloaded jar into place and reloads the extension on the main thread.
+     *
+     * @param plugin host plugin used for logging and scheduler access
+     * @param id extension ID currently being hot-swapped
+     * @param downloadedFile downloaded artifact that will become the active jar
+     * @param loadedExtensions mutable loaded extension registry
+     * @param classLoaders mutable classloader registry for extensions
+     * @param manager manager responsible for lifecycle dispatch
      */
     private static void swapAndReload(JavaPlugin plugin, String id, File downloadedFile,
                                       Map<String, MCExtensionManager.LoadedExtension> loadedExtensions,

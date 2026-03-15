@@ -8,6 +8,9 @@ import java.util.Map;
  * Extracts Git provider metadata from a raw map (parsed extension.yml).
  */
 public final class ExtractGitInfo {
+    /**
+     * Static utility class meant to prevent instantiation.
+     */
     private ExtractGitInfo() {}
 
     /**

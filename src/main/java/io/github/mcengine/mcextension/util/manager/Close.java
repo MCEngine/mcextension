@@ -7,6 +7,9 @@ import java.net.URLClassLoader;
  * Safely closes a URLClassLoader while swallowing non-fatal IO errors.
  */
 public final class Close {
+    /**
+     * Static utility class meant to prevent instantiation.
+     */
     private Close() {}
 
     /**

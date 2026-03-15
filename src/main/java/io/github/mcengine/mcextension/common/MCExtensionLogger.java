@@ -6,11 +6,17 @@ import java.util.Objects;
 import java.util.logging.Logger;
 
 /**
- * Simple logger wrapper that prefixes messages with plugin and extension names.
+ * Simple logger wrapper that prefixes messages with plugin and extension names to keep
+ * logging consistent across every extension.
  */
 public class MCExtensionLogger {
+    /** Host plugin display name used as the first prefix in every log entry. */
     private final String pluginName;
+
+    /** Extension display name used as the second prefix in every log entry. */
     private final String extensionName;
+
+    /** Bukkit logger instance that actually emits the formatted text. */
     private final Logger logger;
 
     /**

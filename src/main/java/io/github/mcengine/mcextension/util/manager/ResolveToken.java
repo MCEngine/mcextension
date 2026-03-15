@@ -8,6 +8,9 @@ import java.util.Locale;
  * Resolves git provider tokens from environment or plugin config.
  */
 public final class ResolveToken {
+    /**
+     * Static utility class meant to prevent instantiation.
+     */
     private ResolveToken() {}
 
     /**

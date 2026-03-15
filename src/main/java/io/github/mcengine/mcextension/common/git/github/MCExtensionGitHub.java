@@ -17,13 +17,20 @@ import java.util.Locale;
 
 /**
  * GitHub utility for checking and downloading extension updates.
+ * <p>
+ * All calls delegate to {@link io.github.mcengine.mcutil.MCUtil} Mojang-style helper and the GitHub REST API
+ * to evaluate {@link io.github.mcengine.mcextension.common.MCExtensionManager.GitInfo} metadata.
+ * </p>
  */
 public final class MCExtensionGitHub {
 
+    /**
+     * Static utility class meant to prevent instantiation.
+     */
     private MCExtensionGitHub() {}
 
     /**
-     * Compares current extension version against the latest GitHub release.
+     * Compares current extension version against the latest GitHub release using the GitHub REST API.
      *
      * @param plugin          host plugin for logging
      * @param owner           repository owner/org
@@ -46,7 +53,8 @@ public final class MCExtensionGitHub {
     }
 
     /**
-     * Downloads the latest release asset (jar) for the repository.
+     * Downloads the latest release asset (jar) for the repository by calling GitHub's release endpoint
+     * and streaming the first available jar asset to disk.
      *
      * @param plugin     host plugin for logging
      * @param owner      repository owner/org
@@ -98,6 +106,7 @@ public final class MCExtensionGitHub {
 
     /**
      * Fetches string content from a URL with optional bearer token, following one redirect manually.
+     * This method encapsulates GitHub API call patterns used by the helper utilities.
      *
      * @param url   target URL
      * @param token optional bearer token
@@ -123,6 +132,7 @@ public final class MCExtensionGitHub {
 
     /**
      * Downloads from URL to destination (via temp file) with optional bearer token.
+     * Ensures partial downloads do not leave corrupt files if interrupted.
      *
      * @param url         source URL
      * @param token       optional bearer token
@@ -151,6 +161,7 @@ public final class MCExtensionGitHub {
 
     /**
      * Opens an HTTP connection with standard headers and optional bearer token.
+     * The "User-Agent" header mirrors the extension updater standard to avoid GitHub rate limits.
      *
      * @param url   target URL
      * @param token optional bearer token
