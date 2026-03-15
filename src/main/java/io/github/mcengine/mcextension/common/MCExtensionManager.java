@@ -51,7 +51,22 @@ public class MCExtensionManager {
             return;
         }
 
-        List<File> pendingFiles = new ArrayList<>(Arrays.asList(files));
+        List<File> pendingFiles = new ArrayList<>();
+        Map<File, ExtensionDescriptor> descriptorByFile = new HashMap<>();
+        List<ExtensionDescriptor> pendingDescriptors = new ArrayList<>();
+        for (File file : files) {
+            ExtensionDescriptor descriptor = LoadExtension.readDescriptor(file);
+            if (descriptor == null || descriptor.id() == null) {
+                plugin.getLogger().severe("Skipping invalid extension descriptor in " + file.getName());
+                continue;
+            }
+
+            pendingFiles.add(file);
+            descriptorByFile.put(file, descriptor);
+            pendingDescriptors.add(descriptor);
+        }
+
+        Map<String, Boolean> licenseResults = BatchCheckLicense.invokeAsync(plugin, pendingDescriptors);
         boolean changed = true;
 
         plugin.getLogger().info("Found " + files.length + " extension(s). Resolving dependencies...");
@@ -74,6 +89,16 @@ public class MCExtensionManager {
                 }
 
                 File file = iterator.next();
+                ExtensionDescriptor descriptor = descriptorByFile.get(file);
+
+                if (descriptor != null) {
+                    Boolean licenseValid = licenseResults.get(descriptor.id());
+                    if (Boolean.FALSE.equals(licenseValid)) {
+                        plugin.getLogger().severe("Extension " + descriptor.id() + " failed batch license verification! Skipping load.");
+                        iterator.remove();
+                        continue;
+                    }
+                }
                 try {
                     LoadResult result = loadExtension(plugin, executor, file);
                     if (result == LoadResult.SUCCESS) {
