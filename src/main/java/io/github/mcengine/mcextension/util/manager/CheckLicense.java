@@ -10,6 +10,9 @@ import java.io.File;
  * Validates an extension's license by delegating to the extension's own check implementation.
  */
 public final class CheckLicense {
+    /**
+     * Static utility class meant to prevent instantiation.
+     */
     private CheckLicense() {}
 
     /**

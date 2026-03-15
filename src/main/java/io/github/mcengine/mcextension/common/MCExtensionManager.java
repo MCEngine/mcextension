@@ -11,30 +11,74 @@ import java.util.*;
 import java.util.concurrent.Executor;
 
 /**
- * Manages the loading, lifecycle, updates, and tracking of {@link IMCExtension}s.
+ * Central orchestration component for extension discovery, dependency resolution,
+ * lifecycle dispatch, and update finalization.
  * <p>
- * Each plugin should instantiate its own {@code MCExtensionManager}. This ensures that
- * extensions are isolated per plugin.
+ * A dedicated manager instance is expected per host plugin so that runtime state
+ * (loaded extensions, isolated classloaders, and reload boundaries) stays scoped to
+ * that plugin instance and does not leak across multiple plugin containers.
+ * </p>
+ * <p>
+ * Lifecycle callbacks are intentionally routed through an {@link Executor} supplied
+ * by the host plugin, allowing costly operations (I/O, remote license verification,
+ * and extension bootstrap/teardown routines) to execute away from the server main
+ * thread to protect tick stability under high extension counts.
  * </p>
  */
 public class MCExtensionManager {
 
+    /**
+     * Mutable registry of loaded extensions keyed by stable extension ID.
+     * <p>
+     * This structure is the source of truth for dependency checks, reload selection,
+     * and version visibility. It is kept instance-local to maintain deterministic
+     * lifecycle isolation between different host plugins.
+     * </p>
+     */
     private final Map<String, LoadedExtension> loadedExtensions = new HashMap<>();
+
+    /**
+     * Tracks extension-scoped classloaders for explicit resource cleanup.
+     * <p>
+     * Closing these loaders during disable/reload prevents jar file locks and avoids
+     * memory retention from stale classes after update cycles.
+     * </p>
+     */
     private final Map<String, URLClassLoader> classLoaders = new HashMap<>();
-    
-    // Limitation for the maximum number of extensions allowed
+
+    /**
+     * Upper bound for concurrently loaded extensions.
+     * <p>
+     * A value of {@code -1} disables this safeguard. Any non-negative value acts as
+     * back-pressure to limit memory growth and lifecycle workload during bulk loads.
+     * </p>
+     */
     private final int maxExtensions;
 
+    /**
+     * Creates a new manager with an optional extension count limit.
+     *
+     * @param maxExtensions maximum number of extensions that may be loaded;
+     *                      use {@code -1} to disable the limit
+     */
     public MCExtensionManager(int maxExtensions) {
         this.maxExtensions = maxExtensions;
     }
 
     /**
-     * Scans the extension folder, completes any pending update renames, and loads all valid .jar files
-     * with extension-only dependency resolution.
+     * Performs the full cold-start extension loading pipeline for the host plugin.
+     * <p>
+     * The pipeline includes: pending update finalization, descriptor discovery from
+     * extension jars, batch license validation, dependency-aware multi-pass loading,
+     * and enforcement of the configured maximum extension count.
+     * </p>
+     * <p>
+     * The provided {@link Executor} is propagated into extension lifecycle routines so
+     * I/O-heavy and initialization tasks can remain off the main server thread.
+     * </p>
      *
-     * @param plugin   The host plugin instance.
-     * @param executor The executor responsible for handling extension tasks.
+     * @param plugin   host plugin context used for filesystem root and structured logging
+     * @param executor executor used to dispatch extension lifecycle work safely off-thread
      */
     public void loadAllExtensions(JavaPlugin plugin, Executor executor) {
         File extensionFolder = new File(plugin.getDataFolder(), "extensions/libs");
@@ -51,7 +95,22 @@ public class MCExtensionManager {
             return;
         }
 
-        List<File> pendingFiles = new ArrayList<>(Arrays.asList(files));
+        List<File> pendingFiles = new ArrayList<>();
+        Map<File, ExtensionDescriptor> descriptorByFile = new HashMap<>();
+        List<ExtensionDescriptor> pendingDescriptors = new ArrayList<>();
+        for (File file : files) {
+            ExtensionDescriptor descriptor = LoadExtension.readDescriptor(file);
+            if (descriptor == null || descriptor.id() == null) {
+                plugin.getLogger().severe("Skipping invalid extension descriptor in " + file.getName());
+                continue;
+            }
+
+            pendingFiles.add(file);
+            descriptorByFile.put(file, descriptor);
+            pendingDescriptors.add(descriptor);
+        }
+
+        Map<String, Boolean> licenseResults = BatchCheckLicense.invokeAsync(plugin, pendingDescriptors);
         boolean changed = true;
 
         plugin.getLogger().info("Found " + files.length + " extension(s). Resolving dependencies...");
@@ -74,6 +133,16 @@ public class MCExtensionManager {
                 }
 
                 File file = iterator.next();
+                ExtensionDescriptor descriptor = descriptorByFile.get(file);
+
+                if (descriptor != null) {
+                    Boolean licenseValid = licenseResults.get(descriptor.id());
+                    if (Boolean.FALSE.equals(licenseValid)) {
+                        plugin.getLogger().severe("Extension " + descriptor.id() + " failed batch license verification! Skipping load.");
+                        iterator.remove();
+                        continue;
+                    }
+                }
                 try {
                     LoadResult result = loadExtension(plugin, executor, file);
                     if (result == LoadResult.SUCCESS) {
@@ -102,12 +171,19 @@ public class MCExtensionManager {
     }
 
     /**
-     * Disables a specific extension by its ID and releases its classloader.
+     * Disables a single loaded extension and tears down its runtime resources.
+     * <p>
+     * If the ID is present, this method removes the extension from the active registry,
+     * invokes {@link IMCExtension#onDisable(JavaPlugin, Executor)}, and always attempts
+     * classloader shutdown to prevent file and class metadata leaks even when disable
+     * callbacks throw.
+     * </p>
      *
-     * @param plugin   The host plugin instance.
-     * @param executor The executor responsible for handling extension tasks.
-     * @param id       The unique ID of the extension to disable.
-     * @return true if the extension was found and disabled, false otherwise.
+     * @param plugin   host plugin context used by the extension disable callback
+     * @param executor executor passed to disable hooks for non-main-thread tasks
+     * @param id       unique extension ID to disable
+     * @return {@code true} when an extension with the provided ID existed and was processed;
+     *         {@code false} when no loaded extension matched the ID
      */
     public boolean disableExtension(JavaPlugin plugin, Executor executor, String id) {
         LoadedExtension loaded = loadedExtensions.remove(id);
@@ -127,10 +203,14 @@ public class MCExtensionManager {
     }
 
     /**
-     * Disables all currently loaded extensions and clears the internal registries.
+     * Disables all currently loaded extensions and resets manager runtime state.
+     * <p>
+     * A defensive snapshot of IDs is used to avoid concurrent modification while each
+     * disable operation mutates internal maps.
+     * </p>
      *
-     * @param plugin   The host plugin instance.
-     * @param executor The executor responsible for handling extension tasks.
+     * @param plugin   host plugin context forwarded to each extension disable call
+     * @param executor executor forwarded to extension lifecycle teardown routines
      */
     public void disableAllExtensions(JavaPlugin plugin, Executor executor) {
         for (String id : new HashMap<>(loadedExtensions).keySet()) {
@@ -141,9 +221,9 @@ public class MCExtensionManager {
     }
 
     /**
-     * Gets a copy of all currently loaded extension IDs and their versions.
+     * Produces a read-only snapshot model of loaded extension versions.
      *
-     * @return map of id -> version
+     * @return newly allocated map where key is extension ID and value is extension version
      */
     public Map<String, String> getLoadedExtensions() {
         Map<String, String> info = new HashMap<>();
@@ -154,7 +234,7 @@ public class MCExtensionManager {
     }
 
     /**
-     * Result status for attempting to load an extension jar.
+     * Load outcome classification used by dependency-resolution loops.
      */
     public enum LoadResult {
         /** Extension loaded successfully. */
@@ -166,17 +246,28 @@ public class MCExtensionManager {
     }
 
     /**
-     * Git provider metadata used for update checks/downloads.
+     * Git source metadata used to resolve remote update channels for an extension.
      */
     public static class GitInfo {
+        /**
+         * Logical provider identifier (for example {@code github} or {@code gitlab}).
+         */
         public final String provider;
+        /**
+         * Repository owner namespace used by the selected provider.
+         */
         public final String owner;
+        /**
+         * Repository name used by the selected provider.
+         */
         public final String repository;
 
         /**
-         * @param provider git provider id (e.g., github/gitlab)
-         * @param owner    repository owner/org
-         * @param repository repository name
+         * Creates immutable git source metadata for update fetch flows.
+         *
+         * @param provider git provider ID (for example {@code github}/{@code gitlab})
+         * @param owner repository owner or organization slug
+         * @param repository repository name slug
          */
         public GitInfo(String provider, String owner, String repository) {
             this.provider = provider;
@@ -186,35 +277,40 @@ public class MCExtensionManager {
     }
 
     /**
-     * Runtime metadata for a loaded extension.
+     * Immutable runtime descriptor for an active extension instance.
      *
-     * @param id       extension id
-     * @param version  extension version
-     * @param instance live extension instance
-     * @param file     source jar file
-     * @param gitInfo  optional git metadata for updates
+     * @param id extension identifier used as registry key
+     * @param version semantic or plugin-defined extension version string
+     * @param instance live extension implementation bound to the host plugin
+     * @param file source extension jar on disk
+     * @param gitInfo optional remote git metadata used for update checks
      */
     public static record LoadedExtension(String id, String version, IMCExtension instance, File file, GitInfo gitInfo) {}
 
     /**
-     * Applies any pending updates staged in the extensions folder (e.g., .update files).
+     * Finalizes pending update artifacts before descriptor scanning begins.
      *
-     * @param plugin          host plugin for logging
-     * @param extensionFolder extensions/libs directory
+     * @param plugin host plugin context used for logging and error reporting
+     * @param extensionFolder extension root directory containing staged update files
      */
     private void finalizePendingUpdates(JavaPlugin plugin, File extensionFolder) {
         FinalizePendingUpdates.invoke(plugin, extensionFolder);
     }
 
     /**
-     * Loads a single extension jar and registers it with this manager.
+     * Loads a single extension jar into this manager instance.
+     * <p>
+     * This method guards manual/single-file loading with the same extension limit policy
+     * used by bulk loading so operational constraints remain consistent.
+     * </p>
      *
-     * @param plugin   host plugin
-     * @param executor executor for extension lifecycle callbacks
-     * @param jarFile  extension jar
-     * @return load result enum
-     * @throws IOException                  when jar access fails
-     * @throws ReflectiveOperationException when main class instantiation fails
+     * @param plugin host plugin context
+     * @param executor executor used to run extension lifecycle work off the main thread
+     * @param jarFile extension jar to parse, validate, and initialize
+     * @return {@link LoadResult#SUCCESS} when loading completed, {@link LoadResult#FAILED}
+     *         for hard failure, or {@link LoadResult#WAITING} when dependencies are unresolved
+     * @throws IOException when jar reading or descriptor parsing fails at I/O level
+     * @throws ReflectiveOperationException when extension main class loading/instantiation fails
      */
     public LoadResult loadExtension(JavaPlugin plugin, Executor executor, File jarFile) throws IOException, ReflectiveOperationException {
         // Enforce the max extensions limit here as well to protect manual loading
@@ -226,45 +322,45 @@ public class MCExtensionManager {
     }
 
     /**
-     * Disables and reloads a specific extension by id.
+     * Reloads a single extension by ID through disable-then-load orchestration.
      *
-     * @param plugin   host plugin
-     * @param executor executor for extension lifecycle callbacks
-     * @param id       extension id
-     * @return true if reload succeeded, false otherwise
+     * @param plugin host plugin context
+     * @param executor executor used for lifecycle callback execution
+     * @param id extension ID to reload
+     * @return {@code true} when the extension is successfully reloaded; otherwise {@code false}
      */
     public boolean reloadExtension(JavaPlugin plugin, Executor executor, String id) {
         return ReloadExtension.invoke(plugin, executor, id, loadedExtensions, classLoaders, this);
     }
 
     /**
-     * Disables all extensions and then reloads every extension from disk.
+     * Reloads all extensions by performing global disable followed by full load pass.
      *
-     * @param plugin   host plugin
-     * @param executor executor for extension lifecycle callbacks
+     * @param plugin host plugin context
+     * @param executor executor used to offload extension lifecycle and I/O-adjacent tasks
      */
     public void reloadAllExtensions(JavaPlugin plugin, Executor executor) {
         ReloadAllExtensions.invoke(plugin, executor, loadedExtensions, classLoaders, this);
     }
 
     /**
-     * Closes and removes the classloader associated with an extension id.
+     * Closes and unregisters the classloader mapped to an extension ID.
      *
-     * @param id extension id
+     * @param id extension ID whose classloader should be released
      */
     private void closeClassLoader(String id) {
         CloseClassLoader.invoke(id, classLoaders);
     }
 
     /**
-     * Descriptor parsed from extension.yml.
+     * Parsed extension descriptor payload produced from extension metadata resources.
      *
-     * @param id               extension id/name
-     * @param mainClass        fully qualified main class
-     * @param version          extension version
-     * @param extensionDepends dependent extension ids
-     * @param gitInfo          optional git metadata
-     * @param file             source jar
+     * @param id extension ID/name used for registry and dependency resolution
+     * @param mainClass fully qualified class name implementing {@link IMCExtension}
+     * @param version extension version string
+     * @param extensionDepends dependency IDs that must be loaded first
+     * @param gitInfo optional git provider metadata for update workflows
+     * @param file source jar file containing this descriptor
      */
     public static record ExtensionDescriptor(String id, String mainClass, String version, List<String> extensionDepends,
                                              GitInfo gitInfo, File file) {

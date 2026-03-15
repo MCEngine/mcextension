@@ -9,6 +9,9 @@ import java.util.Map;
  * Utility for safely extracting string lists from nested YAML maps.
  */
 public final class ExtractStringList {
+    /**
+     * Static utility class meant to prevent instantiation.
+     */
     private ExtractStringList() {}
 
     /**

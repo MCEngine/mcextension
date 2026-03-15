@@ -11,6 +11,9 @@ import java.nio.file.StandardCopyOption;
  * Applies pending extension update artifacts by renaming/moving staged files into their final jar names.
  */
 public final class FinalizePendingUpdates {
+    /**
+     * Static utility class meant to prevent instantiation.
+     */
     private FinalizePendingUpdates() {}
 
     /**

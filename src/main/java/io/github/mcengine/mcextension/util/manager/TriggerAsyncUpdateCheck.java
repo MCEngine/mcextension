@@ -10,6 +10,9 @@ import java.util.concurrent.Executor;
  * Schedules asynchronous update checks for an extension when configured.
  */
 public final class TriggerAsyncUpdateCheck {
+    /**
+     * Static utility class meant to prevent instantiation.
+     */
     private TriggerAsyncUpdateCheck() {}
 
     /**

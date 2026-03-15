@@ -22,6 +22,9 @@ import org.yaml.snakeyaml.Yaml;
  * Loads an extension jar, validates dependencies/license, and registers it with the manager.
  */
 public final class LoadExtension {
+    /**
+     * Static utility class meant to prevent instantiation.
+     */
     private LoadExtension() {}
 
     /**
@@ -34,6 +37,8 @@ public final class LoadExtension {
      * @param classLoaders    registry of classloaders
      * @param manager         owning manager
      * @return load result indicating success/failure/waiting for deps
+     * @throws IOException when jar access or descriptor parsing fails
+     * @throws ReflectiveOperationException when reflective class loading or instantiation fails
      */
     public static LoadResult invoke(JavaPlugin plugin, Executor executor, File jarFile,
                                     Map<String, MCExtensionManager.LoadedExtension> loadedExtensions,
@@ -99,12 +104,13 @@ public final class LoadExtension {
     }
 
     /**
-     * Allows extensions that shaded/relocated the IMCExtension interface to be adapted via reflection.
-     * This checks for compatible method signatures and wraps the instance to our IMCExtension contract.
+     * Allows extensions that shaded or relocated {@code IMCExtension} to be adapted via reflection.
+     * This method bridges binary compatibility by matching the relocated methods (onLoad/onDisable/checkUpdate/checkLicense)
+     * and wrapping them in our {@link IMCExtension} contract so the manager can interact uniformly.
      *
-     * @param instance raw extension instance
+     * @param instance raw extension instance whose API may have been relocated
      * @param plugin   host plugin for logging
-     * @return adapter implementing IMCExtension, or null when the contract is not compatible
+     * @return adapter implementing IMCExtension, or null when the adapted contract still does not fit
      */
     private static IMCExtension adaptRelocatedIMCExtension(Object instance, JavaPlugin plugin) {
         Class<?> clazz = instance.getClass();
@@ -175,6 +181,14 @@ public final class LoadExtension {
         };
     }
 
+    /**
+     * Searches for a method by name and parameter types, returning the first matching reflection handle.
+     *
+     * @param clazz          candidate class to search
+     * @param name           method name to match
+     * @param expectedParams expected parameter type sequence
+     * @return compatible method or null when none matches
+     */
     private static Method findCompatibleMethod(Class<?> clazz, String name, Class<?>... expectedParams) {
         for (Method method : clazz.getMethods()) {
             if (!method.getName().equals(name)) {
@@ -199,6 +213,14 @@ public final class LoadExtension {
         return null;
     }
 
+    /**
+     * Finds a compatible boolean-returning method with the specified signature.
+     *
+     * @param clazz          target class to inspect
+     * @param name           method name to match
+     * @param expectedParams expected params to match
+     * @return method returning boolean or null when none matches
+     */
     private static Method findCompatibleBooleanMethod(Class<?> clazz, String name, Class<?>... expectedParams) {
         Method method = findCompatibleMethod(clazz, name, expectedParams);
         if (method == null) {
@@ -217,7 +239,7 @@ public final class LoadExtension {
      * @param jarFile extension jar
      * @return descriptor or null when missing/invalid
      */
-    private static MCExtensionManager.ExtensionDescriptor readDescriptor(File jarFile) {
+    public static MCExtensionManager.ExtensionDescriptor readDescriptor(File jarFile) {
         try (JarFile jar = new JarFile(jarFile)) {
             JarEntry entry = jar.getJarEntry("extension.yml");
             if (entry == null) {

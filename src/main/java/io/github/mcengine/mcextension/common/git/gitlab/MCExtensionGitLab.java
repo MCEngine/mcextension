@@ -18,14 +18,23 @@ import java.nio.file.StandardCopyOption;
 import java.util.Locale;
 
 /**
- * GitLab utility for checking and downloading extension updates.
+ * GitLab-specific helper responsible for release discovery and artifact download orchestration.
+ * <p>
+ * This utility interprets {@link io.github.mcengine.mcextension.common.MCExtensionManager.GitInfo}
+ * metadata and drives the HTTP interactions with GitLab's REST endpoints, meaning every method is
+ * designed to be stateless and invoked from the manager thread pools while the responses are
+ * safely handled before handing supported artifacts back to {@link io.github.mcengine.mcextension.common.MCExtensionManager}.
+ * </p>
  */
 public final class MCExtensionGitLab {
 
+    /**
+     * Static utility class meant to prevent instantiation.
+     */
     private MCExtensionGitLab() {}
 
     /**
-     * Compares current extension version against the latest GitLab release.
+     * Compares current extension version against the latest GitLab release, using GitLab&apos;s release endpoints.
      *
      * @param plugin          host plugin for logging
      * @param owner           repository owner/org
