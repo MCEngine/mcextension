@@ -15,6 +15,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 
 public final class BatchCheckLicense {
     private BatchCheckLicense() {}
@@ -63,17 +66,41 @@ public final class BatchCheckLicense {
     }
 
     private static CompletableFuture<Void> buildRequest(JavaPlugin plugin, HttpClient client, String url, List<LicenseData> batch, Map<String, Boolean> results) {
+        JsonArray jsonArray = new JsonArray();
+        for (LicenseData data : batch) {
+            JsonObject obj = new JsonObject();
+            obj.addProperty("extensionId", data.extensionId());
+            obj.addProperty("token", data.token());
+            jsonArray.add(obj);
+        }
+        String jsonPayload = jsonArray.toString();
+
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
                 .timeout(Duration.ofSeconds(10))
-                .POST(HttpRequest.BodyPublishers.noBody())
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(jsonPayload))
                 .build();
 
         return client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
                 .thenAccept(response -> {
                     if (response.statusCode() == 200) {
-                        for (LicenseData data : batch) {
-                            results.put(data.extensionId(), true);
+                        boolean parsed = false;
+                        try {
+                            JsonObject payload = JsonParser.parseString(response.body()).getAsJsonObject();
+                            for (Map.Entry<String, ?> entry : payload.entrySet()) {
+                                if (entry.getValue() instanceof Boolean bool) {
+                                    results.put(entry.getKey(), bool);
+                                }
+                            }
+                            parsed = true;
+                        } catch (Exception ignored) {
+                            // Continue, fallback to marking batch as valid
+                        }
+                        if (!parsed) {
+                            for (LicenseData data : batch) {
+                                results.put(data.extensionId(), true);
+                            }
                         }
                     } else {
                         plugin.getLogger().warning("Batch license check returned " + response.statusCode());
