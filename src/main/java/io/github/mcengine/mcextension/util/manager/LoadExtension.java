@@ -217,7 +217,7 @@ public final class LoadExtension {
      * @param jarFile extension jar
      * @return descriptor or null when missing/invalid
      */
-    private static MCExtensionManager.ExtensionDescriptor readDescriptor(File jarFile) {
+    public static MCExtensionManager.ExtensionDescriptor readDescriptor(File jarFile) {
         try (JarFile jar = new JarFile(jarFile)) {
             JarEntry entry = jar.getJarEntry("extension.yml");
             if (entry == null) {
