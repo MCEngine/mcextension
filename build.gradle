@@ -16,7 +16,25 @@ def gitUrl = "https://github.com/${gitOwner}/${gitRepo}"
 println "[${project.name}] Final Version (via Plugin): ${project.version}"
 
 repositories {
+    def ghRepo = io.github.mcengine.gradle.plugin.GithubRepositories.githubPackagesRepo(repositories)
+
     mavenCentral()
+
+    maven {
+        name = 'spigotmc'
+        url = 'https://hub.spigotmc.org/nexus/content/repositories/snapshots/'
+    }
+    maven {
+        name = 'sonatype'
+        url = 'https://oss.sonatype.org/content/groups/public/'
+    }
+
+    ghRepo('MCEngine', 'mcutil')
+}
+
+dependencies {
+    compileOnly 'org.spigotmc:spigot-api:1.21.11-R0.2-SNAPSHOT'
+    compileOnly 'io.github.mcengine:mcutil:2026.0.3-2'
 }
 
 publishing {
