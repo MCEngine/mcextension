@@ -12,7 +12,7 @@ To use MCExtension in your project, add the following to your `pom.xml`. Note th
 <dependency>
   <groupId>io.github.mcengine</groupId>
   <artifactId>mcextension</artifactId>
-  <version>2026.0.3-4</version>
+  <version>2026.0.4-4</version>
 </dependency>
 ```
 

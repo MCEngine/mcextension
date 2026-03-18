@@ -1,3 +1,78 @@
 plugins {
-    id 'mcextension.logic'
+    id 'java'
+    id 'maven-publish'
+    id 'io.github.mcengine.gradle.plugin.version-calculator' version '1.0.2'
+}
+
+group = project.property('project-group')
+
+def artifactId = project.findProperty('project-artifact-id') ?: 'mcextension'
+def artifactName = project.findProperty('project-artifact-name') ?: 'MCExtension'
+def artifactDescription = project.findProperty('project-artifact-description') ?: "Core extension artifact for the MC extension ecosystem."
+def gitOwner = project.findProperty('git-org-name') ?: 'MCClauneck'
+def gitRepo = project.findProperty('git-org-repository') ?: 'mcextension'
+def gitUrl = "https://github.com/${gitOwner}/${gitRepo}"
+
+println "[${project.name}] Final Version (via Plugin): ${project.version}"
+
+repositories {
+    def ghRepo = io.github.mcengine.gradle.plugin.GithubRepositories.githubPackagesRepo(repositories)
+
+    mavenCentral()
+
+    maven {
+        name = 'spigotmc'
+        url = 'https://hub.spigotmc.org/nexus/content/repositories/snapshots/'
+    }
+    maven {
+        name = 'sonatype'
+        url = 'https://oss.sonatype.org/content/groups/public/'
+    }
+
+    ghRepo('MCEngine', 'mcutil')
+}
+
+dependencies {
+    compileOnly 'org.spigotmc:spigot-api:1.21.11-R0.2-SNAPSHOT'
+    compileOnly 'io.github.mcengine:mcutil:2026.0.3-2'
+}
+
+publishing {
+    publications {
+        create('mavenJava', MavenPublication) {
+            artifactId = artifactId
+            from components.java
+
+            pom {
+                name = artifactName
+                description = artifactDescription
+                url = gitUrl
+
+                developers {
+                    developer {
+                        id = 'jetsadawijit'
+                        url = 'https://jetsadawijit.github.io'
+                    }
+                }
+
+                scm {
+                    connection = "scm:git:git://github.com/${gitOwner}/${gitRepo}.git"
+                    developerConnection = "scm:git:ssh://github.com/${gitOwner}/${gitRepo}.git"
+                    url = gitUrl
+                }
+            }
+        }
+    }
+
+    repositories {
+        maven {
+            name = 'GitHubPackages'
+            url = uri("https://maven.pkg.github.com/${gitOwner}/${gitRepo}")
+
+            credentials {
+                username = System.getenv('GITHUB_ACTOR') ?: System.getenv('AGENT_NAME') ?: System.getenv('USER_GITHUB_NAME')
+                password = System.getenv('GITHUB_TOKEN') ?: System.getenv('AGENT_TOKEN') ?: System.getenv('USER_GITHUB_TOKEN')
+            }
+        }
+    }
 }
