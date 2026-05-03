@@ -37,6 +37,12 @@ dependencies {
     compileOnly 'io.github.mcengine:mcutil:2026.0.3-2'
 }
 
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+}
+
 publishing {
     publications {
         create('mavenJava', MavenPublication) {
