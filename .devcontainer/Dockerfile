@@ -1,1 +1,1 @@
-FROM mcr.microsoft.com/devcontainers/java:1-21-bullseye
+FROM mcr.microsoft.com/devcontainers/java:1-25-bullseye
