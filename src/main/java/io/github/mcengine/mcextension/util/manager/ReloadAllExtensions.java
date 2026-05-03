@@ -32,8 +32,6 @@ public final class ReloadAllExtensions {
                               Map<String, URLClassLoader> classLoaders,
                               MCExtensionManager manager) {
         manager.disableAllExtensions(plugin, executor);
-        loadedExtensions.clear();
-        classLoaders.clear();
         manager.loadAllExtensions(plugin, executor);
     }
 }
