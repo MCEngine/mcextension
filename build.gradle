@@ -1,16 +1,16 @@
 plugins {
-    id 'java'
-    id 'maven-publish'
-    id 'io.github.mcengine.gradle.plugin.version-calculator' version '1.0.2'
+    id "java"
+    id "maven-publish"
+    id "io.github.mcengine.gradle.plugin.version-calculator" version "1.0.2"
 }
 
-group = project.property('project-group')
+group = project.property("project-group")
 
-def artifactId = project.findProperty('project-artifact-id') ?: 'mcextension'
-def artifactName = project.findProperty('project-artifact-name') ?: 'MCExtension'
-def artifactDescription = project.findProperty('project-artifact-description') ?: "Core extension artifact for the MC extension ecosystem."
-def gitOwner = project.findProperty('git-org-name') ?: 'MCClauneck'
-def gitRepo = project.findProperty('git-org-repository') ?: 'mcextension'
+def artifactId = project.findProperty("project-artifact-id") ?: "mcextension"
+def artifactName = project.findProperty("project-artifact-name") ?: "MCExtension"
+def artifactDescription = project.findProperty("project-artifact-description") ?: "Core extension artifact for the MC extension ecosystem."
+def gitOwner = project.findProperty("git-org-name") ?: "MCClauneck"
+def gitRepo = project.findProperty("git-org-repository") ?: "mcextension"
 def gitUrl = "https://github.com/${gitOwner}/${gitRepo}"
 
 println "[${project.name}] Final Version (via Plugin): ${project.version}"
@@ -21,25 +21,31 @@ repositories {
     mavenCentral()
 
     maven {
-        name = 'spigotmc'
-        url = 'https://hub.spigotmc.org/nexus/content/repositories/snapshots/'
+        name = "papermc"
+        url = uri("https://repo.papermc.io/repository/maven-public/")
     }
     maven {
-        name = 'sonatype'
-        url = 'https://oss.sonatype.org/content/groups/public/'
+        name = "sonatype"
+        url = "https://oss.sonatype.org/content/groups/public/"
     }
 
-    ghRepo('MCEngine', 'mcutil')
+    ghRepo("MCEngine", "mcutil")
 }
 
 dependencies {
-    compileOnly 'org.spigotmc:spigot-api:1.21.11-R0.2-SNAPSHOT'
-    compileOnly 'io.github.mcengine:mcutil:2026.0.3-2'
+    compileOnly "io.papermc.paper:paper-api:26.1.2.build.+"
+    compileOnly "io.github.mcengine:mcutil:2026.0.3-2"
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
 }
 
 publishing {
     publications {
-        create('mavenJava', MavenPublication) {
+        create("mavenJava", MavenPublication) {
             artifactId = artifactId
             from components.java
 
@@ -50,8 +56,8 @@ publishing {
 
                 developers {
                     developer {
-                        id = 'jetsadawijit'
-                        url = 'https://jetsadawijit.github.io'
+                        id = "jetsadawijit"
+                        url = "https://jetsadawijit.github.io"
                     }
                 }
 
@@ -66,12 +72,12 @@ publishing {
 
     repositories {
         maven {
-            name = 'GitHubPackages'
+            name = "GitHubPackages"
             url = uri("https://maven.pkg.github.com/${gitOwner}/${gitRepo}")
 
             credentials {
-                username = System.getenv('GITHUB_ACTOR') ?: System.getenv('AGENT_NAME') ?: System.getenv('USER_GITHUB_NAME')
-                password = System.getenv('GITHUB_TOKEN') ?: System.getenv('AGENT_TOKEN') ?: System.getenv('USER_GITHUB_TOKEN')
+                username = System.getenv("GITHUB_ACTOR") ?: System.getenv("AGENT_GITHUB_NAME") ?: System.getenv("USER_GITHUB_NAME")
+                password = System.getenv("GITHUB_TOKEN") ?: System.getenv("AGENT_GITHUB_TOKEN") ?: System.getenv("USER_GITHUB_TOKEN")
             }
         }
     }

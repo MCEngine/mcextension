@@ -66,7 +66,7 @@ public final class HandleUpdate {
             return;
         }
 
-        org.bukkit.Bukkit.getScheduler().runTask(plugin, () -> swapAndReload(plugin, descriptor.id(), downloaded, loadedExtensions, classLoaders, manager));
+        org.bukkit.Bukkit.getGlobalRegionScheduler().execute(plugin, () -> swapAndReload(plugin, descriptor.id(), downloaded, loadedExtensions, classLoaders, manager));
     }
 
     /**
@@ -89,7 +89,7 @@ public final class HandleUpdate {
             return;
         }
 
-        Executor mainThread = command -> org.bukkit.Bukkit.getScheduler().runTask(plugin, command);
+        Executor mainThread = command -> org.bukkit.Bukkit.getGlobalRegionScheduler().execute(plugin, command);
         manager.disableExtension(plugin, mainThread, id);
 
         File oldFile = loaded.file();

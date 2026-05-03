@@ -64,6 +64,7 @@ public class MCExtensionCommand implements CommandExecutor {
             case "reload" -> handleReload(sender, args);
             case "reloadall" -> handleReloadAll(sender);
             case "disable" -> handleDisable(sender, args);
+            case "disableall" -> handleDisableAll(sender);
             default -> sendUsage(sender, label);
         }
         return true;
@@ -135,6 +136,16 @@ public class MCExtensionCommand implements CommandExecutor {
     }
 
     /**
+     * Disables all extensions without blocking the main thread, leveraging the shared manager/executor.
+     *
+     * @param sender command issuer
+     */
+    private void handleDisableAll(CommandSender sender) {
+        manager.disableAllExtensions(plugin, executor);
+        sender.sendMessage(ChatColor.GREEN + "Disabled all extensions.");
+    }
+
+    /**
      * Sends the usage instructions for the admin command and highlights available subcommands.
      *
      * @param sender command issuer
@@ -146,5 +157,6 @@ public class MCExtensionCommand implements CommandExecutor {
         sender.sendMessage(ChatColor.AQUA + "/" + label + " reload <id>" + ChatColor.GRAY + " - Reload a specific extension");
         sender.sendMessage(ChatColor.AQUA + "/" + label + " reloadall" + ChatColor.GRAY + " - Reload all extensions");
         sender.sendMessage(ChatColor.AQUA + "/" + label + " disable <id>" + ChatColor.GRAY + " - Disable a specific extension");
+        sender.sendMessage(ChatColor.AQUA + "/" + label + " disableall" + ChatColor.GRAY + " - Disable all extensions");
     }
 }
