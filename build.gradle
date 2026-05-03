@@ -21,8 +21,8 @@ repositories {
     mavenCentral()
 
     maven {
-        name = 'spigotmc'
-        url = 'https://hub.spigotmc.org/nexus/content/repositories/snapshots/'
+        name = "papermc"
+        url = uri("https://repo.papermc.io/repository/maven-public/")
     }
     maven {
         name = 'sonatype'
@@ -33,7 +33,7 @@ repositories {
 }
 
 dependencies {
-    compileOnly 'org.spigotmc:spigot-api:1.21.11-R0.2-SNAPSHOT'
+    compileOnly 'io.papermc.paper:paper-api:1.21.1-R0.1-SNAPSHOT'
     compileOnly 'io.github.mcengine:mcutil:2026.0.3-2'
 }
 
