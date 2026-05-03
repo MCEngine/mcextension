@@ -12,7 +12,7 @@ To use MCExtension in your project, add the following to your `pom.xml`. Note th
 <dependency>
   <groupId>io.github.mcengine</groupId>
   <artifactId>mcextension</artifactId>
-  <version>2026.0.4-4</version>
+  <version>2026.0.6-1</version>
 </dependency>
 ```
 
@@ -85,51 +85,9 @@ license:
   token: "YOUR-LICENSE-KEY-HERE"
 ```
 
-### 2. Managing Extensions
+### 2. Managing Extensions (Folia/Paper)
 
 Use the `MCExtensionManager` in your main plugin to handle the loading process.
-
-```java
-public class MySpigotMCPlugin extends JavaPlugin {
-    private MCExtensionManager extensionManager;
-
-    @Override
-    public void onEnable() {
-        // Standard Spigot Async Executor
-        Executor spigotExecutor = task -> 
-            Bukkit.getScheduler().runTaskAsynchronously(this, task);
-
-        this.extensionManager = new MCExtensionManager(this, spigotExecutor);
-        this.extensionManager.loadAllExtensions();
-    }
-
-    @Override
-    public void onDisable() {
-        if (extensionManager != null) extensionManager.disableAllExtensions();
-    }
-}
-```
-
-```java
-public class MyPaperMCPlugin extends JavaPlugin {
-    private MCExtensionManager extensionManager;
-
-    @Override
-    public void onEnable() {
-        // Modern Paper Async Executor
-        Executor paperExecutor = task -> 
-            Bukkit.getAsyncScheduler().runNow(this, scheduledTask -> task.run());
-
-        this.extensionManager = new MCExtensionManager(this, paperExecutor);
-        this.extensionManager.loadAllExtensions();
-    }
-
-    @Override
-    public void onDisable() {
-        if (extensionManager != null) extensionManager.disableAllExtensions();
-    }
-}
-```
 
 ```java
 public class MyFoliaMCPlugin extends JavaPlugin {
@@ -141,13 +99,22 @@ public class MyFoliaMCPlugin extends JavaPlugin {
         Executor foliaExecutor = task -> 
             Bukkit.getAsyncScheduler().runNow(this, scheduledTask -> task.run());
 
-        this.extensionManager = new MCExtensionManager(this, foliaExecutor);
-        this.extensionManager.loadAllExtensions();
+        // Initialize with max extensions (or -1 for unlimited)
+        this.extensionManager = new MCExtensionManager(-1);
+        
+        // Load all extensions using the provided executor
+        this.extensionManager.loadAllExtensions(this, foliaExecutor);
     }
 
     @Override
     public void onDisable() {
-        if (extensionManager != null) extensionManager.disableAllExtensions();
+        if (extensionManager != null) {
+            // Standard Paper/Folia Global Region Executor for shutdown
+            Executor shutdownExecutor = task -> 
+                Bukkit.getGlobalRegionScheduler().execute(this, task);
+            
+            extensionManager.disableAllExtensions(this, shutdownExecutor);
+        }
     }
 }
 ```
