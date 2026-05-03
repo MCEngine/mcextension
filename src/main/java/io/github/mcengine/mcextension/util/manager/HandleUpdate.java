@@ -66,7 +66,12 @@ public final class HandleUpdate {
             return;
         }
 
-        org.bukkit.Bukkit.getScheduler().runTask(plugin, () -> swapAndReload(plugin, descriptor.id(), downloaded, loadedExtensions, classLoaders, manager));
+        try {
+            Class.forName("io.papermc.paper.threadedregions.RegionScheduler");
+            org.bukkit.Bukkit.getGlobalRegionScheduler().execute(plugin, () -> swapAndReload(plugin, descriptor.id(), downloaded, loadedExtensions, classLoaders, manager));
+        } catch (ClassNotFoundException e) {
+            org.bukkit.Bukkit.getScheduler().runTask(plugin, () -> swapAndReload(plugin, descriptor.id(), downloaded, loadedExtensions, classLoaders, manager));
+        }
     }
 
     /**
@@ -89,7 +94,14 @@ public final class HandleUpdate {
             return;
         }
 
-        Executor mainThread = command -> org.bukkit.Bukkit.getScheduler().runTask(plugin, command);
+        Executor mainThread = command -> {
+            try {
+                Class.forName("io.papermc.paper.threadedregions.RegionScheduler");
+                org.bukkit.Bukkit.getGlobalRegionScheduler().execute(plugin, command);
+            } catch (ClassNotFoundException e) {
+                org.bukkit.Bukkit.getScheduler().runTask(plugin, command);
+            }
+        };
         manager.disableExtension(plugin, mainThread, id);
 
         File oldFile = loaded.file();
