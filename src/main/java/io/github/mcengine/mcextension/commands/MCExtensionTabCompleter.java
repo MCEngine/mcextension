@@ -50,7 +50,7 @@ public class MCExtensionTabCompleter implements TabCompleter {
         }
 
         if (args.length == 1) {
-            List<String> subs = List.of("list", "reload", "reloadall", "disable");
+            List<String> subs = List.of("list", "reload", "reloadall", "disable", "disableall");
             return filterPrefix(subs, args[0]);
         }
 
